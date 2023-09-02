@@ -1,7 +1,7 @@
 "Ready to go files"  for people who got problems with compilators, IDF etc(I know how annoying this could be), under Windows.
 Just download prepared files for arduino and esp32 from Blueretro and OGX360 folders(Use "Download raw file" option).
 ## ESP32  part :
-I am using esp32-wroom32d Devkit c 
+I am using esp32-wroom32d DevkitC V4. 
 Dowload [flash download tool](https://www.espressif.com/sites/default/files/tools/flash_download_tool_3.9.5.zip) 
 Run program and set :
 Chip Type : ESP32
@@ -26,7 +26,11 @@ Click START - and done.
 avrdude -C avrdude.conf -F -p atmega32u4 -c avr109 -b 57600 -P COMx -Uflash:w:ogx360.hex:i
 * !ALter COMx with Yours for arduino!
 * Done.
+
+* 
 ## Connections
+
+
 Wiring
 For Player 1: Connect right side pin6 (A2), and pin7 (A1) on the Arduino to ground(GND).
 
@@ -51,7 +55,7 @@ Connect right side pin22 (SCL) from Esp32 with Arduinos pin8 (D2).
 
 Connect right side pin21 (SDA) from Esp32 with Arduinos pin7 (D3).
 
-Connect pin 2 of that set to pin 22 on the esp32 and pin 3 to pin 21 on the esp32.
+
 
 <img src="./Images/Esp32 pinouts.jpg" alt="flash2"/>  
 
@@ -72,6 +76,7 @@ like this one :
 <img src="./Images/Level Shifter.jpg" alt="flash2"/>  
 
 Just search for example "4 Channels IIC I2C Logic Level Converter Bi-Directional Module 3.3V to 5V Shifter for Arduino" in Your favourite shopping site.
+
 Or ignore that, and jump into action in Your favourite ogXbox game.
 
 
@@ -81,8 +86,19 @@ Or ignore that, and jump into action in Your favourite ogXbox game.
 
 I have made some trick, and suprising - it works.
 
-I powered my "pro micro board" with 3,3V direct at VCC pin after removing U2(LDO regulator). SDA, SCL are now 3,3V logic.
+
+  After accidently shorted U2(LDO regulator), I remove it and  powered my "pro micro board" with 3,3V from esp32.  
+
+On Arduino :take out cable from pin1 (RAW), and connect to pin4(Vcc).
+
+ON esp32 : take out  cable from bottom left pin5V and connect it to top left pin 3V3.
+
+Now everything will be powered from Esp32 board over usb socket, onboard LDO lowers 5V to 3,3V - powering esp32 and over pin3v3 - Arduino/s 
+
+SDA, SCL are now 3,3V logic.
+
 From atmega32u datasheet stays that 16MHz version need to be powered with 5V, lower voltage means lower cpu clock. 
+
 Coresponding to this diagram Arduino is working  now with 8MHz clock.
 
 
@@ -97,7 +113,11 @@ Coresponding to this diagram Arduino is working  now with 8MHz clock.
 
 
 
-Ogx360 is written specialy for 16MHz version of Arduino. Now clock is lower, and i didnt feel any difference. So I do not know what have really changed in clocks settings, but Voltage is now safe for esp32. Need to make more test and compare to orginal version to see if something is slower, or worse.
+Ogx360 is written specialy for 16MHz version of Arduino. Now clock is lower, and i didnt feel any difference. 
+
+So I do not know what have really changed in clocks settings, but Voltage is now safe for esp32. 
+
+Need to make more test and compare to orginal version to see if something is slower, or worse.
 
 
 
