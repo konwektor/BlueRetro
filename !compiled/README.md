@@ -75,14 +75,27 @@ Just search for example "4 Channels IIC I2C Logic Level Converter Bi-Directional
 Or ignore that, and jump into action in Your favourite ogXbox game.
 
 
-## update without level shifter
+
+
+## Update without level shifter
 
 I have made some trick, and suprising - it works.
 
 I powered my "pro micro board" with 3,3V direct at VCC pin after removing U2(LDO regulator). SDA, SCL are now 3,3V logic.
 From atmega32u datasheet stays that 16MHz version need to be powered with 5V, lower voltage means lower cpu clock. 
+Coresponding to this diagram Arduino is working  now with 8MHz clock.
 
-<img src="https://imgur.com/gallery/XB93wPL"/>(Arduino Clock-Vcc diagram)
+
+
+
+
+
+
+<img src="Atmega32u4 Clock Vs Vcc - Imgur.jpg"/>
+
+
+
+
 
 Ogx360 is written specialy for 16MHz version of Arduino. Now clock is lower, and i didnt feel any difference. So I do not know what have really changed in clocks settings, but Voltage is now safe for esp32. Need to make more test and compare to orginal version to see if something is slower, or worse.
 
