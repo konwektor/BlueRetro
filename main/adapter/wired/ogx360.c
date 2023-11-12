@@ -119,7 +119,7 @@ void ogx360_from_generic(int32_t dev_mode, struct generic_ctrl *ctrl_data, struc
     
     //Start Rumble
     struct bt_data *bt_data = &bt_adapter.data[wired_data->index];
-    if ( bt_data->base.pids->type == BT_XBOX) // Rumble is hanging PS4 controllers, untested on the rest.
+    if ( bt_data->base.pids->type == BT_XBOX || bt_data->base.pids->type == BT_WII || bt_data->base.pids->type == BT_PS) // Rumble is NOT hanging anymore PS4, WII controllers, untested on the rest.
     {
         if (duke_in->startByte == 0x00 && duke_in->bLength == 6)
         {
