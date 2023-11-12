@@ -1,5 +1,6 @@
 #ifndef _OGX360_H_
 #define _OGX360_H_
+#include "adapter/adapter.h"
 #include "adapter/config.h"
 
 void ogx360_meta_init(struct generic_ctrl *ctrl_data);
