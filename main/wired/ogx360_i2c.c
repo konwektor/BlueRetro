@@ -1,5 +1,6 @@
 #include <esp32/rom/ets_sys.h>
 #include "adapter/adapter.h"
+#include "adapter/config.h"
 #include "driver/i2c.h"
 #include <soc/i2c_periph.h>
 #include "ogx360_i2c.h"
@@ -19,7 +20,7 @@ void ogx360_check_connected_controllers()
     }
 }
 
-void ogx360_initialize_i2c(void) {
+void ogx360_i2c_init(void) {
     i2c_config_t conf = {
         .mode = I2C_MODE_MASTER,
         .sda_io_num = 22,
@@ -58,7 +59,7 @@ void ogx360_process(uint8_t player)
                 if (result == 0)
                 {    
                     memset((void*)&wired_adapter.data[player].output,0,7);
-                    result = i2c_master_read_from_device(I2C_NUM_0,player + 1, (void*)&wired_adapter.data[player].output, 7, 1048575);
+                    result = i2c_master_read_from_device(I2C_NUM_0,player + 1, (void*)&wired_adapter.data[player].output, 7, 1);
                     if (result != ESP_OK) ets_printf("OGX360 read result: %d Index: %d\n",result,player);
                 }
             }
