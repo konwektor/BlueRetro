@@ -1,0 +1,7 @@
+{
+    "idf.adapterTargetName": "esp32",
+    "files.associations": {
+        "bare_metal_app_cpu.h": "c",
+        "ogx360_i2c.h": "c"
+    }
+}

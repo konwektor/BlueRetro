@@ -209,7 +209,7 @@ static void ps_cmd_req_hdlr(struct ps_ctrl_port *port, uint8_t id, uint8_t cmd, 
     switch (cmd) {
         case 0x42:
         {
-            if (port->dev_id[id] != 0x41 && config.out_cfg[id + port->mt_first_port].acc_mode == ACC_RUMBLE) {
+            if (port->dev_id[id] != 0x41 && config.out_cfg[id].acc_mode == ACC_RUMBLE) {
                 struct raw_fb fb_data = {0};
                 req++;
                 if (port->rumble_r_state[id]) {
@@ -492,9 +492,6 @@ static void packet_end(void *arg) {
                 uint8_t len = port->game_id_len - offset;
 
                 offset += 4;
-
-                uint8_t *str = &port->rx_buf[port->active_rx_buf][offset];
-
                 if (len > 13) {
                     len = 13;
                 }
@@ -503,7 +500,7 @@ static void packet_end(void *arg) {
                 fb_data.header.type = FB_TYPE_GAME_ID;
                 fb_data.header.data_len = len;
                 for (uint32_t i = 0; i < len; ++i) {
-                    fb_data.data[i] = str[i];
+                    fb_data.data[i] = port->rx_buf[port->active_rx_buf][offset + i];
                 }
                 adapter_q_fb(&fb_data);
 

@@ -48,7 +48,6 @@ void bt_hid_sw_get_calib(int32_t dev_id, struct bt_hid_sw_ctrl_calib **cal) {
 }
 
 void bt_hid_sw_init(struct bt_dev *device) {
-#ifndef CONFIG_BLUERETRO_TEST_FALLBACK_REPORT
     struct bt_hid_sw_ctrl_calib *dev_calib = &calib[device->ids.id];
     struct bt_hidp_sw_conf sw_conf = {
         .subcmd = BT_HIDP_SW_SUBCMD_SET_LED,
@@ -59,7 +58,6 @@ void bt_hid_sw_init(struct bt_dev *device) {
     memset((uint8_t *)dev_calib, 0, sizeof(*dev_calib));
 
     bt_hid_cmd_sw_set_conf(device, (void *)&sw_conf);
-#endif
 }
 
 void bt_hid_sw_hdlr(struct bt_dev *device, struct bt_hci_pkt *bt_hci_acl_pkt, uint32_t len) {
@@ -179,9 +177,7 @@ void bt_hid_sw_hdlr(struct bt_dev *device, struct bt_hci_pkt *bt_hci_acl_pkt, ui
                                     bt_hid_cmd_sw_set_conf(device, (void *)&sw_conf);
 
                                     /* Enable report stall monitoring */
-                                    if (device->ids.subtype != BT_SW_HYPERKIN_ADMIRAL) {
-                                        atomic_set_bit(&device->flags, BT_DEV_REPORT_MON);
-                                    }
+                                    atomic_set_bit(&device->flags, BT_DEV_REPORT_MON);
 
                                     break;
                                 }
@@ -214,21 +210,10 @@ void bt_hid_sw_hdlr(struct bt_dev *device, struct bt_hci_pkt *bt_hci_acl_pkt, ui
                     }
                     break;
                 }
-                case BT_HIDP_SW_STATUS:
-                {
-                    if (device->ids.report_type != BT_HIDP_SW_STATUS) {
-                        bt_type_update(device->ids.id, BT_SW, device->ids.subtype);
-                        device->ids.report_type = BT_HIDP_SW_STATUS;
-                    }
-                    bt_host_bridge(device, bt_hci_acl_pkt->hidp_hdr.protocol, bt_hci_acl_pkt->hidp_data, hidp_data_len);
-                    break;
-                }
+                //case BT_HIDP_SW_STATUS:
                 case BT_HIDP_SW_STATUS_NATIVE:
                 {
-                    if (device->ids.report_type != BT_HIDP_SW_STATUS_NATIVE) {
-                        bt_type_update(device->ids.id, BT_SW, device->ids.subtype);
-                        device->ids.report_type = BT_HIDP_SW_STATUS_NATIVE;
-                    }
+                    //data_dump(bt_hci_acl_pkt->hidp_data, hidp_data_len);
                     bt_host_bridge(device, bt_hci_acl_pkt->hidp_hdr.protocol, bt_hci_acl_pkt->hidp_data, hidp_data_len);
                     break;
                 }

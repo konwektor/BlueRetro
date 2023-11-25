@@ -2,7 +2,6 @@
  * Copyright (c) 2021-2022, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
-
 #include <stddef.h>
 #include "npiso_io.h"
 #include "cdi_uart.h"

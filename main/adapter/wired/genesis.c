@@ -337,7 +337,7 @@ static void genesis_ea_from_generic(struct generic_ctrl *ctrl_data, struct wired
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp));
 }
 
-void IRAM_ATTR genesis_init_buffer(int32_t dev_mode, struct wired_data *wired_data) {
+void genesis_init_buffer(int32_t dev_mode, struct wired_data *wired_data) {
     /* Hackish but wtv */
     struct genesis_map *map1 = (struct genesis_map *)wired_adapter.data[0].output;
     struct genesis_map *map2 = (struct genesis_map *)wired_adapter.data[1].output;
@@ -517,7 +517,7 @@ void genesis_from_generic(int32_t dev_mode, struct generic_ctrl *ctrl_data, stru
     }
 }
 
-void IRAM_ATTR genesis_gen_turbo_mask(uint32_t index, struct wired_data *wired_data) {
+void genesis_gen_turbo_mask(uint32_t index, struct wired_data *wired_data) {
     struct genesis_map *map_mask = (struct genesis_map *)wired_data->output_mask;
 
     memset(map_mask, 0, sizeof(*map_mask));
@@ -554,7 +554,7 @@ void IRAM_ATTR genesis_gen_turbo_mask(uint32_t index, struct wired_data *wired_d
     }
 }
 
-void IRAM_ATTR genesis_twh_gen_turbo_mask(struct wired_data *wired_data) {
+void genesis_twh_gen_turbo_mask(struct wired_data *wired_data) {
     struct genesis_map *map_mask = (struct genesis_map *)wired_data->output_mask;
 
     map_mask->twh_buttons = 0x0000;

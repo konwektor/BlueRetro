@@ -104,7 +104,7 @@ static const uint8_t gc_kb_scancode[KBM_MAX] = {
     0x55, 0x5A, 0x00,
 };
 
-void IRAM_ATTR gc_init_buffer(int32_t dev_mode, struct wired_data *wired_data) {
+void gc_init_buffer(int32_t dev_mode, struct wired_data *wired_data) {
     switch (dev_mode) {
         case DEV_KB:
         {
@@ -224,7 +224,7 @@ void gc_fb_to_generic(int32_t dev_mode, struct raw_fb *raw_fb_data, struct gener
     fb_data->start = 0;
 }
 
-void IRAM_ATTR gc_gen_turbo_mask(struct wired_data *wired_data) {
+void gc_gen_turbo_mask(struct wired_data *wired_data) {
     struct gc_map *map_mask = (struct gc_map *)wired_data->output_mask;
 
     map_mask->buttons = 0xFFFF;

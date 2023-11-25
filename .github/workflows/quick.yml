@@ -24,7 +24,7 @@ jobs:
     - name: Set python3 default
       run: sudo update-alternatives --install /usr/bin/python python /usr/bin/python3 10 && alias pip=pip3
     - name: Clone BlueRetroRoot
-      run: git clone https://github.com/konwektor/BlueRetroRoot.git .
+      run: git clone https://github.com/darthcloud/BlueRetroRoot.git .
     - name: Fetch submodules
       run: git submodule update --init --recursive
     - name: Checkout main repo
@@ -51,7 +51,7 @@ jobs:
       env:
         IDF_TOOLS_PATH : "/home/runner/work/BlueRetro/BlueRetro/BlueRetroRoot/"
     - name: Upload artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v2
       with:
         name: ${{ env.br_version }}_${{ github.event.inputs.hw_version }}_${{ github.event.inputs.br_config }}
         path: |

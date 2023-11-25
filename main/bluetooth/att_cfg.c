@@ -4,9 +4,7 @@
  */
 
 #include <stdio.h>
-#include <dirent.h>
 #include <esp_ota_ops.h>
-#include <esp_system.h>
 #include "host.h"
 #include "hci.h"
 #include "att.h"
@@ -18,7 +16,6 @@
 #include "adapter/memory_card.h"
 #include "adapter/gameid.h"
 #include "system/manager.h"
-#include "system/fs.h"
 
 #define ATT_MAX_LEN 512
 #define BR_ABI_VER 2
@@ -27,13 +24,8 @@
 #define CFG_CMD_GET_FW_VER 0x02
 #define CFG_CMD_GET_BDADDR 0x03
 #define CFG_CMD_GET_GAMEID 0x04
-#define CFG_CMD_GET_CFG_SRC 0x05
-#define CFG_CMD_GET_FILE 0x06
 #define CFG_CMD_SET_DEFAULT_CFG 0x10
 #define CFG_CMD_SET_GAMEID_CFG 0x11
-#define CFG_CMD_OPEN_DIR 0x12
-#define CFG_CMD_CLOSE_DIR 0x13
-#define CFG_CMD_DEL_FILE 0x14
 #define CFG_CMD_SYS_DEEP_SLEEP 0x37
 #define CFG_CMD_SYS_RESET 0x38
 #define CFG_CMD_SYS_FACTORY 0x39
@@ -89,8 +81,7 @@ static uint16_t in_cfg_offset = 0;
 static uint16_t in_cfg_id = 0;
 static uint32_t mc_offset = 0;
 static uint8_t cfg_cmd = 0;
-static DIR *d = NULL;
-static struct dirent *dir = NULL;
+static uint32_t cfg_dst = DEFAULT_CFG;
 
 static void bt_att_cmd_gatt_char_read_type_rsp(uint16_t handle) {
     struct bt_att_read_type_rsp *rd_type_rsp = (struct bt_att_read_type_rsp *)bt_hci_pkt_tmp.att_data;
@@ -281,7 +272,7 @@ static void bt_att_cfg_cmd_abi_ver_rsp(uint16_t handle) {
 }
 
 static void bt_att_cfg_cmd_fw_ver_rsp(uint16_t handle) {
-    const esp_app_desc_t *app_desc = esp_app_get_description();
+    const esp_app_desc_t *app_desc = esp_ota_get_app_description();
 
     memcpy(bt_hci_pkt_tmp.att_data, app_desc->version, 23);
     bt_hci_pkt_tmp.att_data[23] = 0;
@@ -302,43 +293,12 @@ static void bt_att_cfg_cmd_bdaddr_rsp(uint16_t handle) {
 
 static void bt_att_cfg_cmd_gameid_rsp(uint16_t handle) {
     const char *gameid = gid_get();
-    uint32_t len = strlen(gameid);
 
-    if (len > 23) {
-        len = 23;
-    }
-
-    memcpy(bt_hci_pkt_tmp.att_data, gameid, len);
-
-    bt_att_cmd(handle, BT_ATT_OP_READ_RSP, len);
-}
-
-static void bt_att_cfg_cmd_cfg_src_rsp(uint16_t handle) {
-    bt_hci_pkt_tmp.att_data[0] = config_get_src();
+    memcpy(bt_hci_pkt_tmp.att_data, gameid, 23);
+    bt_hci_pkt_tmp.att_data[23] = 0;
     printf("# %s %s\n", __FUNCTION__, bt_hci_pkt_tmp.att_data);
 
-    bt_att_cmd(handle, BT_ATT_OP_READ_RSP, 1);
-}
-
-static void bt_att_cfg_cmd_file_rsp(uint16_t handle) {
-    uint32_t len;
-
-    dir = readdir(d);
-
-    if (dir == NULL) {
-        len = 0;
-    }
-    else {
-        len = strlen(dir->d_name);
-    }
-
-    if (len > 23) {
-        len = 23;
-    }
-
-    memcpy(bt_hci_pkt_tmp.att_data, dir->d_name, len);
-
-    bt_att_cmd(handle, BT_ATT_OP_READ_RSP, len);
+    bt_att_cmd(handle, BT_ATT_OP_READ_RSP, 23);
 }
 
 static void bt_att_cmd_read_group_rsp(uint16_t handle, uint16_t start, uint16_t end) {
@@ -394,33 +354,21 @@ static void bt_att_cfg_cmd_rd_hdlr(uint16_t handle) {
         case CFG_CMD_GET_GAMEID:
             bt_att_cfg_cmd_gameid_rsp(handle);
             break;
-        case CFG_CMD_GET_CFG_SRC:
-            bt_att_cfg_cmd_cfg_src_rsp(handle);
-            break;
-        case CFG_CMD_GET_FILE:
-            bt_att_cfg_cmd_file_rsp(handle);
-            break;
         default:
             printf("# Invalid read cfg cmd: %02X\n", cfg_cmd);
-            bt_att_cfg_cmd_abi_ver_rsp(handle);
             break;
     }
 }
 
-static void bt_att_cfg_cmd_wr_hdlr(struct bt_dev *device, uint8_t *data, uint32_t len) {
-    cfg_cmd = data[0];
+static void bt_att_cfg_cmd_wr_hdlr(struct bt_dev *device, struct bt_att_write_req *wr_req) {
+    cfg_cmd = wr_req->value[0];
 
-    switch (cfg_cmd) {
+    switch (wr_req->value[0]) {
         case CFG_CMD_SET_DEFAULT_CFG:
-        {
-            char tmp_str[32] = "/fs/";
-            config_init(DEFAULT_CFG);
-            strcat(tmp_str, gid_get());
-            remove(tmp_str);
+            cfg_dst = DEFAULT_CFG;
             break;
-        }
         case CFG_CMD_SET_GAMEID_CFG:
-            config_update(GAMEID_CFG);
+            cfg_dst = GAMEID_CFG;
             break;
         case CFG_CMD_OTA_START:
             update_partition = esp_ota_get_next_update_partition(NULL);
@@ -470,30 +418,6 @@ static void bt_att_cfg_cmd_wr_hdlr(struct bt_dev *device, uint8_t *data, uint32_
                 printf("# OTA FW Update abort from WebUI\n");
             }
             break;
-        case CFG_CMD_OPEN_DIR:
-            if (d) {
-                closedir(d);
-            }
-            d = opendir(ROOT);
-            break;
-        case CFG_CMD_CLOSE_DIR:
-            if (d) {
-                closedir(d);
-            }
-            break;
-        case CFG_CMD_DEL_FILE:
-        {
-            char tmp_str[32] = "/fs/";
-            memcpy(&tmp_str[4], &data[1], len - 1);
-            tmp_str[4 + len - 1] = 0;
-            printf("# delete file: %s\n", tmp_str);
-            if (strncmp(&tmp_str[4], gid_get(), len) == 0) {
-                printf("# Deleting current cfg, switch to default\n");
-                config_init(DEFAULT_CFG);
-            }
-            remove(tmp_str);
-            break;
-        }
         default:
             break;
     }
@@ -521,14 +445,14 @@ void bt_att_cfg_hdlr(struct bt_dev *device, struct bt_hci_pkt *bt_hci_acl_pkt, u
         {
             struct bt_att_find_info_req *find_info_req = (struct bt_att_find_info_req *)bt_hci_acl_pkt->att_data;
             printf("# BT_ATT_OP_FIND_INFO_REQ %04X %04X\n", find_info_req->start_handle, find_info_req->end_handle);
-            bt_att_cmd_error_rsp(device->acl_handle, BT_ATT_OP_FIND_INFO_REQ, find_info_req->start_handle, BT_ATT_ERR_NOT_SUPPORTED);
+            bt_att_cmd_error_rsp(device->acl_handle, BT_ATT_OP_FIND_INFO_REQ, find_info_req->start_handle, BT_ATT_ERR_ATTRIBUTE_NOT_FOUND);
             break;
         }
         case BT_ATT_OP_FIND_TYPE_REQ:
         {
             struct bt_att_find_type_req *fd_type_req = (struct bt_att_find_type_req *)bt_hci_acl_pkt->att_data;
             printf("# BT_ATT_OP_FIND_TYPE_REQ %04X %04X\n", fd_type_req->start_handle, fd_type_req->end_handle);
-            bt_att_cmd_error_rsp(device->acl_handle, BT_ATT_OP_FIND_TYPE_REQ, fd_type_req->start_handle, BT_ATT_ERR_NOT_SUPPORTED);
+            bt_att_cmd_error_rsp(device->acl_handle, BT_ATT_OP_FIND_TYPE_REQ, fd_type_req->start_handle, BT_ATT_ERR_ATTRIBUTE_NOT_FOUND);
             break;
         }
         case BT_ATT_OP_READ_TYPE_REQ:
@@ -649,17 +573,17 @@ void bt_att_cfg_hdlr(struct bt_dev *device, struct bt_hci_pkt *bt_hci_acl_pkt, u
                 case BR_GLBL_CFG_CHRC_HDL:
                     printf("# BR_GLBL_CFG_CHRC_HDL %04X\n", wr_req->handle);
                     memcpy((void *)&config.global_cfg, wr_req->value, sizeof(config.global_cfg));
-                    config_update(config_get_src());
+                    config_update(cfg_dst);
                     bt_att_cmd_wr_rsp(device->acl_handle);
                     break;
                 case BR_OUT_CFG_DATA_CHRC_HDL:
                     memcpy((void *)&config.out_cfg[out_cfg_id], wr_req->value, sizeof(config.out_cfg[0]));
-                    config_update(config_get_src());
+                    config_update(cfg_dst);
                     bt_att_cmd_wr_rsp(device->acl_handle);
                     break;
                 case BR_IN_CFG_DATA_CHRC_HDL:
                     memcpy((void *)&config.in_cfg[in_cfg_id] + in_cfg_offset, wr_req->value, data_len);
-                    config_update(config_get_src());
+                    config_update(cfg_dst);
                     bt_att_cmd_wr_rsp(device->acl_handle);
                     break;
                 case BR_OUT_CFG_CTRL_CHRC_HDL:
@@ -672,7 +596,7 @@ void bt_att_cfg_hdlr(struct bt_dev *device, struct bt_hci_pkt *bt_hci_acl_pkt, u
                     bt_att_cmd_wr_rsp(device->acl_handle);
                     break;
                 case BR_CFG_CMD_CHRC_HDL:
-                    bt_att_cfg_cmd_wr_hdlr(device, wr_req->value, data_len);
+                    bt_att_cfg_cmd_wr_hdlr(device, wr_req);
                     break;
                 case BR_OTA_FW_DATA_CHRC_HDL:
                     esp_ota_write(ota_hdl, wr_req->value, data_len);
@@ -724,7 +648,7 @@ void bt_att_cfg_hdlr(struct bt_dev *device, struct bt_hci_pkt *bt_hci_acl_pkt, u
             struct bt_att_exec_write_req *exec_wr_req = (struct bt_att_exec_write_req *)bt_hci_acl_pkt->att_data;
             printf("# BT_ATT_OP_EXEC_WRITE_REQ\n");
             if (!ota_hdl && exec_wr_req->flags == BT_ATT_FLAG_EXEC) {
-                config_update(config_get_src());
+                config_update(cfg_dst);
             }
             bt_att_cmd_exec_wr_rsp(device->acl_handle);
             break;

@@ -191,7 +191,7 @@ static DRAM_ATTR const uint32_t jag_6d_bbits[3][4] = {
 };
 
 
-void IRAM_ATTR jag_init_buffer(int32_t dev_mode, struct wired_data *wired_data) {
+void jag_init_buffer(int32_t dev_mode, struct wired_data *wired_data) {
     switch (dev_mode) {
         default:
         {
@@ -339,7 +339,7 @@ void jag_from_generic(int32_t dev_mode, struct generic_ctrl *ctrl_data, struct w
     jag_io_force_update();
 }
 
-void IRAM_ATTR jag_gen_turbo_mask(struct wired_data *wired_data) {
+void jag_gen_turbo_mask(struct wired_data *wired_data) {
     const uint32_t (*btns_mask)[32] = (config.out_cfg[0].dev_mode == DEV_PAD_ALT) ? jag_6d_btns_mask : jag_btns_mask;
     struct jag_map *map_mask = (struct jag_map *)wired_data->output_mask;
 

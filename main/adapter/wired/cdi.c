@@ -285,7 +285,7 @@ static const uint8_t cdi_kb_code_shift_alt[KBM_MAX] = {
     0x00, 0x00, 0x1D,
 };
 
-void IRAM_ATTR cdi_init_buffer(int32_t dev_mode, struct wired_data *wired_data) {
+void cdi_init_buffer(int32_t dev_mode, struct wired_data *wired_data) {
     switch (dev_mode) {
         case DEV_KB:
             /* Use acc cfg to choose KB type */
@@ -418,7 +418,7 @@ static void cdi_kb_from_generic(struct generic_ctrl *ctrl_data, struct wired_dat
     kbmon_update(ctrl_data->index, ctrl_data);
 }
 
-void cdi_kb_id_to_scancode(uint32_t dev_id, uint8_t type, uint8_t id) {
+void cdi_kb_id_to_scancode(uint8_t dev_id, uint8_t type, uint8_t id) {
     if (id < KBM_MAX) {
         uint8_t kb_buf[3] = {0};
         uint8_t scancode, change = 0;
@@ -554,7 +554,7 @@ void cdi_from_generic(int32_t dev_mode, struct generic_ctrl *ctrl_data, struct w
     }
 }
 
-void IRAM_ATTR cdi_gen_turbo_mask(struct wired_data *wired_data) {
+void cdi_gen_turbo_mask(struct wired_data *wired_data) {
     struct cdi_map *map_mask = (struct cdi_map *)wired_data->output_mask;
 
     memset(map_mask, 0xFF, sizeof(*map_mask));

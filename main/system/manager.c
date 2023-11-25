@@ -613,12 +613,10 @@ void sys_mgr_init(void) {
     }
 
     io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
-#ifdef CONFIG_BLUERETRO_HW2
     io_conf.pin_bit_mask = 1ULL << POWER_ON_PIN;
     gpio_config(&io_conf);
     io_conf.pin_bit_mask = 1ULL << RESET_PIN;
     gpio_config(&io_conf);
-#endif
 
     internal_flag_init();
 
@@ -649,7 +647,6 @@ void sys_mgr_init(void) {
     io_conf.pin_bit_mask = 1ULL << power_off_pin;
     gpio_config(&io_conf);
 
-    gpio_set_level(RESET_PIN, 1);
     io_conf.mode = GPIO_MODE_OUTPUT_OD;
     io_conf.pin_bit_mask = 1ULL << RESET_PIN;
     gpio_config(&io_conf);

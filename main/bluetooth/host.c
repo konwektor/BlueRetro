@@ -269,18 +269,13 @@ static void bt_fb_task(void *param) {
                 {
                     if (bt_data) {
                         if (adapter_bridge_fb(fb_data, bt_data)) {
-                            bt_hid_feedback(device, bt_data->base.output);
+                            bt_hid_feedback(device, bt_data->output);
                         }
                     }
                     break;
                 }
                 case FB_TYPE_GAME_ID:
                     if (gid_update(fb_data)) {
-                        config_init(GAMEID_CFG);
-                    }
-                    break;
-                case FB_TYPE_SYS_ID:
-                    if (gid_update_sys(fb_data)) {
                         config_init(GAMEID_CFG);
                     }
                     break;
@@ -317,17 +312,17 @@ static void bt_host_task(void *param) {
 
             /* Check if we stopped receiving reports */
             if (atomic_test_bit(&device->flags, BT_DEV_REPORT_MON)) {
-                if (bt_data->base.report_cnt == bt_data->base.report_cnt_last) {
+                if (device->report_cnt == device->report_cnt_last) {
                     device->report_stall_cnt++;
                 }
                 else {
-                    bt_data->base.report_cnt_last = bt_data->base.report_cnt;
+                    device->report_cnt_last = device->report_cnt;
                     device->report_stall_cnt = 0;
                 }
                 if (device->report_stall_cnt > 5) {
                     printf("# %s dev: %ld report stalled\n", __FUNCTION__, device->ids.id);
                     device->report_stall_cnt = 0;
-                    bt_data->base.report_cnt = 0;
+                    device->report_cnt = 0;
 
                     switch (device->ids.type) {
                         case BT_SW:
@@ -539,17 +534,17 @@ void bt_host_reset_dev(struct bt_dev *device) {
     return;
 
 reset_dev:
+    uint8_t *output_ptr = bt_adapter.data[dev_id].output;
     adapter_init_buffer(dev_id);
-    memset(bt_adapter.data[dev_id].raw_src_mappings, 0, sizeof(*bt_adapter.data[0].raw_src_mappings) * REPORT_MAX);
-    memset(bt_adapter.data[dev_id].reports, 0, sizeof(*bt_adapter.data[0].reports) * REPORT_MAX);
-    memset(&bt_adapter.data[dev_id].base, 0, sizeof(bt_adapter.data[0].base));
-    memset(device, 0, sizeof(*device));
+    memset((void *)&bt_adapter.data[dev_id], 0, sizeof(bt_adapter.data[0]));
+    memset((void *)device, 0, sizeof(*device));
 
     device->ids.id = dev_id;
     device->ids.out_idx = dev_id;
     device->ids.type = BT_NONE;
     device->ids.subtype = BT_SUBTYPE_DEFAULT;
-    bt_adapter.data[dev_id].base.pids = &device->ids;
+    bt_adapter.data[dev_id].pids = &device->ids;
+    bt_adapter.data[dev_id].output = output_ptr;
 }
 
 void bt_host_q_wait_pkt(uint32_t ms) {
@@ -716,25 +711,16 @@ int32_t bt_host_get_next_accept_le_bdaddr(bt_addr_le_t *le_bdaddr) {
 
 void bt_host_bridge(struct bt_dev *device, uint8_t report_id, uint8_t *data, uint32_t len) {
     struct bt_data *bt_data = &bt_adapter.data[device->ids.id];
-    uint32_t report_type = PAD;
 
 #ifdef CONFIG_BLUERETRO_BT_TIMING_TESTS
     atomic_set_bit(&bt_flags, BT_HOST_DBG_MODE);
     bt_dbg_init(device->ids.type);
 #else
-#ifdef CONFIG_BLUERETRO_RAW_REPORT_DUMP
-    printf("# ");
-    for (uint32_t i = 0; i < len; i++) {
-        printf("%02X ", data[i]);
-    }
-    printf("\n");
-#else
     if (device->ids.type == BT_HID_GENERIC) {
         uint32_t i = 0;
         for (; i < REPORT_MAX; i++) {
             if (bt_data->reports[i].id == report_id) {
-                bt_data->base.report_type = i;
-                report_type = i;
+                bt_data->report_type = i;
                 len = bt_data->reports[i].len;
                 break;
             }
@@ -743,13 +729,12 @@ void bt_host_bridge(struct bt_dev *device, uint8_t report_id, uint8_t *data, uin
             return;
         }
     }
-    if (atomic_test_bit(&bt_data->base.flags[report_type], BT_INIT) || bt_data->base.report_cnt > 1) {
-        bt_data->base.report_id = report_id;
-        bt_data->base.input = data;
-        bt_data->base.input_len = len;
+    if (atomic_test_bit(&bt_data->flags, BT_INIT) || device->report_cnt > 1) {
+        bt_data->report_id = report_id;
+        bt_data->input = data;
+        bt_data->input_len = len;
         adapter_bridge(bt_data);
     }
-    bt_data->base.report_cnt++;
-#endif
+    device->report_cnt++;
 #endif
 }

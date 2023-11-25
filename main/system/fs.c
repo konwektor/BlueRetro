@@ -11,6 +11,8 @@
 #include "sdkconfig.h"
 #include "fs.h"
 
+#define ROOT "/fs"
+
 int32_t fs_init(void) {
     int32_t ret;
 

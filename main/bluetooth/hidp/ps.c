@@ -96,7 +96,6 @@ void bt_hid_cmd_ps_set_conf(struct bt_dev *device, void *report) {
 }
 
 void bt_hid_ps_init(struct bt_dev *device) {
-#ifndef CONFIG_BLUERETRO_TEST_FALLBACK_REPORT
     const esp_timer_create_args_t ps5_timer_args = {
         .callback = &bt_hid_ps5_init_callback,
         .arg = (void *)device,
@@ -113,7 +112,6 @@ void bt_hid_ps_init(struct bt_dev *device) {
     esp_timer_create(&ps5_timer_args, (esp_timer_handle_t *)&device->timer_hdl);
     esp_timer_start_once(device->timer_hdl, 1000000);
     bt_hid_cmd_ps4_set_conf(device, (void *)&ps4_set_conf);
-#endif
 }
 
 void bt_hid_ps_hdlr(struct bt_dev *device, struct bt_hci_pkt *bt_hci_acl_pkt, uint32_t len) {
@@ -123,24 +121,11 @@ void bt_hid_ps_hdlr(struct bt_dev *device, struct bt_hci_pkt *bt_hci_acl_pkt, ui
     switch (bt_hci_acl_pkt->sig_hdr.code) {
         case BT_HIDP_DATA_IN:
             switch (bt_hci_acl_pkt->hidp_hdr.protocol) {
-                case BT_HIDP_HID_STATUS:
-                    if (device->ids.subtype != BT_SUBTYPE_DEFAULT) {
-                        bt_type_update(device->ids.id, BT_PS, BT_SUBTYPE_DEFAULT);
-                    }
-                    bt_host_bridge(device, bt_hci_acl_pkt->hidp_hdr.protocol, bt_hci_acl_pkt->hidp_data, hidp_data_len);
-                    break;
-                case BT_HIDP_PS4_STATUS:
-                    if (device->ids.report_type != BT_HIDP_PS4_STATUS) {
-                        bt_type_update(device->ids.id, BT_PS, BT_SUBTYPE_DEFAULT);
-                        device->ids.report_type = BT_HIDP_PS4_STATUS;
-                    }
-                    bt_host_bridge(device, bt_hci_acl_pkt->hidp_hdr.protocol, bt_hci_acl_pkt->hidp_data, hidp_data_len);
-                    break;
                 case BT_HIDP_PS5_STATUS:
-                    if (device->ids.report_type != BT_HIDP_PS5_STATUS) {
-                        bt_type_update(device->ids.id, BT_PS, BT_PS5_DS);
-                        device->ids.report_type = BT_HIDP_PS5_STATUS;
-                    }
+                    device->ids.subtype = BT_PS5_DS;
+                    /* Fallthrough */
+                case BT_HIDP_HID_STATUS:
+                case BT_HIDP_PS4_STATUS:
                     bt_host_bridge(device, bt_hci_acl_pkt->hidp_hdr.protocol, bt_hci_acl_pkt->hidp_data, hidp_data_len);
                     break;
             }

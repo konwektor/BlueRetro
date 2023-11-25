@@ -163,7 +163,7 @@ static const uint8_t dc_kb_scancode[KBM_MAX] = {
     0x00, 0x00, 0x00,
 };
 
-void IRAM_ATTR dc_init_buffer(int32_t dev_mode, struct wired_data *wired_data) {
+void dc_init_buffer(int32_t dev_mode, struct wired_data *wired_data) {
     switch (dev_mode) {
         case DEV_KB:
         {
@@ -390,7 +390,7 @@ void dc_fb_to_generic(int32_t dev_mode, struct raw_fb *raw_fb_data, struct gener
     }
 }
 
-void IRAM_ATTR dc_gen_turbo_mask(struct wired_data *wired_data) {
+void dc_gen_turbo_mask(struct wired_data *wired_data) {
     struct dc_map *map_mask = (struct dc_map *)wired_data->output_mask;
 
     map_mask->triggers = 0xFFFF;

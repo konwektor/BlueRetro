@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2023, Jacques Gagnon
+ * Copyright (c) 2019-2020, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -15,7 +15,6 @@
 #include "system/fs.h"
 #include "system/led.h"
 #include "adapter/adapter.h"
-#include "adapter/adapter_debug.h"
 #include "adapter/config.h"
 #include "bluetooth/host.h"
 #include "wired/detect.h"
@@ -57,14 +56,6 @@ static void wired_init_task(void) {
         adapter_init_buffer(i);
     }
 
-    struct raw_fb fb_data = {0};
-    const char *sysname = wired_get_sys_name();
-    fb_data.header.wired_id = 0;
-    fb_data.header.type = FB_TYPE_SYS_ID;
-    fb_data.header.data_len = strlen(sysname);
-    memcpy(fb_data.data, sysname, fb_data.header.data_len);
-    adapter_q_fb(&fb_data);
-
     if (wired_adapter.system_id < WIRED_MAX) {
         wired_comm_init();
     }
@@ -79,13 +70,11 @@ static void wl_init_task(void *arg) {
 
     core0_stall_init();
 
-#ifndef CONFIG_BLUERETRO_QEMU
     if (fs_init()) {
         err_led_set();
         err = 1;
         printf("FS init fail!\n");
     }
-#endif
 
 #ifdef CONFIG_BLUERETRO_SYSTEM_SEA_BOARD
     fpga_config();
@@ -101,15 +90,9 @@ static void wl_init_task(void *arg) {
     }
 #endif
 
-#ifndef CONFIG_BLUERETRO_QEMU
     mc_init();
 
     sys_mgr_init();
-#endif
-
-#ifdef CONFIG_BLUERETRO_PKT_INJECTION
-    adapter_debug_injector_init();
-#endif
 
     if (ota_state == ESP_OTA_IMG_PENDING_VERIFY) {
         if (err) {

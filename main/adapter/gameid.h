@@ -9,7 +9,6 @@
 #include "adapter/adapter.h"
 
 int32_t gid_update(struct raw_fb *fb_data);
-int32_t gid_update_sys(struct raw_fb *fb_data);
 char *gid_get(void);
 
 #endif /* _GAMEID_H_ */

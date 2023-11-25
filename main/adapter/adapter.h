@@ -6,7 +6,6 @@
 #ifndef _ADAPTER_H_
 #define _ADAPTER_H_
 
-#include <stdio.h>
 #include <esp_attr.h>
 #include "zephyr/atomic.h"
 
@@ -40,9 +39,6 @@ enum {
     BT_SUBTYPE_DEFAULT = 0,
     BT_WII_NUNCHUCK,
     BT_WII_CLASSIC,
-    BT_WII_CLASSIC_8BIT,
-    BT_WII_CLASSIC_PRO,
-    BT_WII_CLASSIC_PRO_8BIT,
     BT_WIIU_PRO,
     BT_PS5_DS,
     BT_XBOX_XINPUT,
@@ -55,7 +51,6 @@ enum {
     BT_SW_N64,
     BT_SW_MD_GEN,
     BT_SW_POWERA,
-    BT_SW_HYPERKIN_ADMIRAL,
     BT_8BITDO_GBROS,
     BT_SUBTYPE_MAX,
 };
@@ -284,11 +279,6 @@ enum {
     BT_QUIRK_SW_LEFT_JOYCON,
     BT_QUIRK_SW_RIGHT_JOYCON,
     BT_QUIRK_8BITDO_N64,
-    BT_QUIRK_8BITDO_M30,
-    BT_QUIRK_BLUEN64_N64,
-    BT_QUIRK_RF_WARRIOR,
-    BT_QUIRK_8BITDO_SATURN,
-    BT_QUIRK_STADIA,
 };
 
 /* Wired flags */
@@ -359,7 +349,6 @@ enum {
     FB_TYPE_PLAYER_LED,
     FB_TYPE_MEM_WRITE,
     FB_TYPE_GAME_ID,
-    FB_TYPE_SYS_ID,
 };
 
 struct ctrl_meta {
@@ -405,8 +394,8 @@ struct generic_fb {
             uint32_t start;
         };
     };
-     uint32_t left_motor;
-    uint32_t right_motor;
+    uint8_t left_motor;
+    uint8_t right_motor;
 };
 
 struct raw_fb_header {
@@ -431,6 +420,7 @@ struct hid_usage {
 };
 
 struct hid_report {
+    atomic_t flags;
     uint32_t id;
     uint32_t len;
     uint32_t usage_cnt;
@@ -442,7 +432,6 @@ struct raw_src_mapping {
     uint32_t desc[4];
     uint32_t btns_mask[32];
     uint32_t axes_to_btns[6];
-    const struct ctrl_meta *meta;
 };
 
 struct bt_ids {
@@ -450,28 +439,24 @@ struct bt_ids {
     int32_t out_idx;
     int32_t type;
     uint32_t subtype;
-    uint32_t report_type;
 } __packed;
 
-struct bt_data_base {
-    atomic_t flags[REPORT_MAX];
+struct bt_data {
+    /* Bi-directional */
+    atomic_t flags;
+    /* from adapter */
+    uint8_t *output; /* 128 */
+    /* from wireless */
     struct bt_ids *pids;
     uint32_t report_id;
     int32_t report_type;
-    uint32_t report_cnt;
-    uint32_t report_cnt_last;
+    struct raw_src_mapping raw_src_mappings[REPORT_MAX];
+    struct hid_report reports[REPORT_MAX];
     uint8_t *input;
     uint32_t input_len;
-    uint8_t *sdp_data;
-    uint32_t sdp_len;
     int32_t axes_cal[ADAPTER_MAX_AXES];
-    uint8_t output[128];
-};
-
-struct bt_data {
-    struct bt_data_base base;
-    struct raw_src_mapping *raw_src_mappings;
-    struct hid_report *reports;
+    uint32_t sdp_len;
+    uint8_t *sdp_data;
 };
 
 struct wired_data {
@@ -492,7 +477,7 @@ struct wired_data {
         uint16_t output_mask16[32];
         uint32_t output_mask32[16];
     };
-    uint8_t cnt_mask[KBM_MAX];
+    uint32_t *cnt_mask;
 };
 
 struct wired_adapter {
@@ -506,7 +491,7 @@ struct wired_adapter {
 };
 
 struct bt_adapter {
-    struct bt_data data[BT_MAX_DEV];
+    struct bt_data *data;
 };
 
 typedef int32_t (*to_generic_t)(struct bt_data *bt_data, struct generic_ctrl *ctrl_data);
@@ -533,20 +518,4 @@ uint32_t adapter_bridge_fb(struct raw_fb *fb_data, struct bt_data *bt_data);
 void adapter_q_fb(struct raw_fb *fb_data);
 void adapter_init(void);
 
-static inline void bt_type_update(int32_t dev_id, int32_t type, uint32_t subtype) {
-    struct bt_data *bt_data = &bt_adapter.data[dev_id];
-
-    if (bt_data->base.pids) {
-        bt_data->base.pids->type = type;
-        bt_data->base.pids->subtype = subtype;
-        bt_data->base.report_cnt = 0;
-        bt_data->base.report_cnt_last = 0;
-        for (uint32_t i = 0; i < REPORT_MAX; i++) {
-            atomic_clear_bit(&bt_data->base.flags[i], BT_INIT);
-        }
-        printf("# %s: dev: %ld type: %ld subtype: %ld\n", __FUNCTION__, dev_id, type, subtype);
-    }
-}
-
 #endif /* _ADAPTER_H_ */
-
