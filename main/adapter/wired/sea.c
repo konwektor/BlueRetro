@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022, Jacques Gagnon
+ * Copyright (c) 2019-2023, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -42,7 +42,7 @@ struct sea_map {
     uint8_t buttons_osd;
 } __packed;
 
-static const uint32_t sea_mask[4] = {0x337F0F00, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t sea_mask[4] = {0x337F0F00, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t sea_desc[4] = {0x00000000, 0x00000000, 0x00000000, 0x00000000};
 static DRAM_ATTR const uint32_t sea_btns_mask[32] = {
     0, 0, 0, 0,
@@ -76,7 +76,7 @@ void IRAM_ATTR sea_init_buffer(int32_t dev_mode, struct wired_data *wired_data) 
     map_mask->buttons_high = 0;
 }
 
-void sea_meta_init(struct generic_ctrl *ctrl_data) {
+void sea_meta_init(struct wired_ctrl *ctrl_data) {
     memset((void *)ctrl_data, 0, sizeof(*ctrl_data)*WIRED_MAX_DEV);
 
     for (uint32_t i = 0; i < WIRED_MAX_DEV; i++) {
@@ -85,7 +85,7 @@ void sea_meta_init(struct generic_ctrl *ctrl_data) {
     }
 }
 
-void sea_from_generic(int32_t dev_mode, struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+void sea_from_generic(int32_t dev_mode, struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     if (ctrl_data->index < 1) {
         struct sea_map map_tmp;
         uint32_t map_mask = 0xFFFFFFFF;
@@ -149,6 +149,11 @@ void sea_from_generic(int32_t dev_mode, struct generic_ctrl *ctrl_data, struct w
         sea_tx_byte(map_tmp.buttons_osd);
 
         memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp));
+
+#ifdef CONFIG_BLUERETRO_RAW_OUTPUT
+        printf("{\"log_type\": \"wired_output\", \"btns\": [%ld, %ld, %d]}\n",
+            map_tmp.buttons, map_tmp.buttons_high, map_tmp.buttons_osd);
+#endif
     }
 }
 

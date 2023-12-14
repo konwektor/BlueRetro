@@ -19,7 +19,7 @@ jobs:
     - name: Set python3 default
       run: sudo update-alternatives --install /usr/bin/python python /usr/bin/python3 10 && alias pip=pip3
     - name: Clone BlueRetroRoot
-      run: git clone https://github.com/konwektor/BlueRetroRoot.git .
+      run: git clone https://github.com/darthcloud/BlueRetroRoot.git .
     - name: Fetch submodules
       run: git submodule update --init --recursive
     - name: Checkout main repo

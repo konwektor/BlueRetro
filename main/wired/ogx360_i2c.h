@@ -1,4 +1,4 @@
-#ifndef _OGX360_I2C_H_
+ #ifndef _OGX360_I2C_H_
 #define _OGX360_I2C_H_
 
 void ogx360_check_connected_controllers();

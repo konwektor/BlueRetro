@@ -26,6 +26,7 @@ enum {
     DBG_CMD_GLOBAL_CFG,
     DBG_CMD_OUT_CFG,
     DBG_CMD_IN_CFG,
+    DBG_CMD_SYSTEM_ID,
 };
 
 struct adapter_debug_pkt {
@@ -77,7 +78,7 @@ static void adapter_debug_task(void *arg) {
     while (1) {
         rx_len = uart_read_bytes(UART_NUM_0, uart_buffer, 4, portMAX_DELAY);
         if (rx_len) {
-            rx_len = uart_read_bytes(UART_NUM_0, pkt->data, pkt->data_len, 20 / portTICK_PERIOD_MS);
+            rx_len = uart_read_bytes(UART_NUM_0, pkt->data, pkt->data_len, 50 / portTICK_PERIOD_MS);
 
             if (rx_len != pkt->data_len) {
                 printf("# %s data RX timeout\n", __FUNCTION__);
@@ -118,6 +119,7 @@ static void adapter_debug_task(void *arg) {
                     if (device) {
                         bt_hid_set_type_flags_from_name(device, (char *)pkt->data);
                         printf("# dev: %ld type: %ld:%ld %s\n", device->ids.id, device->ids.type, device->ids.subtype, pkt->data);
+                        bt_hid_init(device);
                     }
                     break;
                 case DBG_CMD_HID_DESC:
@@ -155,6 +157,10 @@ static void adapter_debug_task(void *arg) {
                     /* Input config */
                     memcpy(&config.in_cfg[pkt->data[0]], &pkt->data[1], pkt->data_len - 1);
                     break;
+                case DBG_CMD_SYSTEM_ID:
+                    /* Set System ID */
+                    wired_adapter.system_id = pkt->data[0];
+                    break;
                 default:
                     printf("# %s invalid cmd: 0x%02X\n", __FUNCTION__, pkt->cmd);
                     data_dump(uart_buffer, rx_len);
@@ -165,15 +171,38 @@ static void adapter_debug_task(void *arg) {
 }
 #endif
 
-void adapter_debug_print(struct generic_ctrl *ctrl_input) {
-        printf("LX: %s%08lX%s, LY: %s%08lX%s, RX: %s%08lX%s, RY: %s%08lX%s, LT: %s%08lX%s, RT: %s%08lX%s, BTNS: %s%08lX%s, BTNS: %s%08lX%s, BTNS: %s%08lX%s, BTNS: %s%08lX%s",
-            BOLD, ctrl_input->axes[0].value, RESET, BOLD, ctrl_input->axes[1].value, RESET, BOLD, ctrl_input->axes[2].value, RESET, BOLD, ctrl_input->axes[3].value, RESET,
-            BOLD, ctrl_input->axes[4].value, RESET, BOLD, ctrl_input->axes[5].value, RESET, BOLD, ctrl_input->btns[0].value, RESET, BOLD, ctrl_input->btns[1].value, RESET,
-            BOLD, ctrl_input->btns[2].value, RESET, BOLD, ctrl_input->btns[3].value, RESET);
+void adapter_debug_wireless_print(struct wireless_ctrl *ctrl_input) {
+#ifdef CONFIG_BLUERETRO_JSON_DBG
+    printf(", \"axes\": [%ld, %ld, %ld, %ld, %lu, %lu], \"btns\": [%lu, %lu, %lu, %lu]}\n",
+        ctrl_input->axes[0].value, ctrl_input->axes[1].value, ctrl_input->axes[2].value, ctrl_input->axes[3].value, ctrl_input->axes[4].value, ctrl_input->axes[5].value,
+        ctrl_input->btns[0].value, ctrl_input->btns[1].value, ctrl_input->btns[2].value, ctrl_input->btns[3].value);
+#else
+    printf("LX: %s%08lX%s, LY: %s%08lX%s, RX: %s%08lX%s, RY: %s%08lX%s, LT: %s%08lX%s, RT: %s%08lX%s, BTNS: %s%08lX%s, BTNS: %s%08lX%s, BTNS: %s%08lX%s, BTNS: %s%08lX%s",
+        BOLD, ctrl_input->axes[0].value, RESET, BOLD, ctrl_input->axes[1].value, RESET, BOLD, ctrl_input->axes[2].value, RESET, BOLD, ctrl_input->axes[3].value, RESET,
+        BOLD, ctrl_input->axes[4].value, RESET, BOLD, ctrl_input->axes[5].value, RESET, BOLD, ctrl_input->btns[0].value, RESET, BOLD, ctrl_input->btns[1].value, RESET,
+        BOLD, ctrl_input->btns[2].value, RESET, BOLD, ctrl_input->btns[3].value, RESET);
 #ifdef CONFIG_BLUERETRO_ADAPTER_BTNS_DBG
-        adapter_debug_btns(ctrl_input->btns[0].value);
+    adapter_debug_btns(ctrl_input->btns[0].value);
 #endif
-        printf("\n");
+    printf("\n");
+#endif
+}
+
+void adapter_debug_wired_print(struct wired_ctrl *ctrl_input) {
+#ifdef CONFIG_BLUERETRO_JSON_DBG
+    printf(", \"axes\": [%ld, %ld, %ld, %ld, %lu, %lu], \"btns\": [%lu, %lu, %lu, %lu]}\n",
+        ctrl_input->axes[0].value, ctrl_input->axes[1].value, ctrl_input->axes[2].value, ctrl_input->axes[3].value, ctrl_input->axes[4].value, ctrl_input->axes[5].value,
+        ctrl_input->btns[0].value, ctrl_input->btns[1].value, ctrl_input->btns[2].value, ctrl_input->btns[3].value);
+#else
+    printf("LX: %s%08lX%s, LY: %s%08lX%s, RX: %s%08lX%s, RY: %s%08lX%s, LT: %s%08lX%s, RT: %s%08lX%s, BTNS: %s%08lX%s, BTNS: %s%08lX%s, BTNS: %s%08lX%s, BTNS: %s%08lX%s",
+        BOLD, ctrl_input->axes[0].value, RESET, BOLD, ctrl_input->axes[1].value, RESET, BOLD, ctrl_input->axes[2].value, RESET, BOLD, ctrl_input->axes[3].value, RESET,
+        BOLD, ctrl_input->axes[4].value, RESET, BOLD, ctrl_input->axes[5].value, RESET, BOLD, ctrl_input->btns[0].value, RESET, BOLD, ctrl_input->btns[1].value, RESET,
+        BOLD, ctrl_input->btns[2].value, RESET, BOLD, ctrl_input->btns[3].value, RESET);
+#ifdef CONFIG_BLUERETRO_ADAPTER_BTNS_DBG
+    adapter_debug_btns(ctrl_input->btns[0].value);
+#endif
+    printf("\n");
+#endif
 }
 
 void adapter_debug_injector_init(void) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022, Jacques Gagnon
+ * Copyright (c) 2019-2023, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -44,22 +44,22 @@ static DRAM_ATTR const uint8_t ps_mouse_axes_idx[ADAPTER_MAX_AXES] =
 
 static DRAM_ATTR const struct ctrl_meta ps_axes_meta[ADAPTER_MAX_AXES] =
 {
-    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x90},
-    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x90, .polarity = 1},
-    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x90},
-    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x90, .polarity = 1},
-    {.size_min = 0, .size_max = 255, .neutral = 0x00, .abs_max = 0xFF},
-    {.size_min = 0, .size_max = 255, .neutral = 0x00, .abs_max = 0xFF},
+    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x90, .abs_min = 0x90},
+    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x90, .abs_min = 0x90, .polarity = 1},
+    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x90, .abs_min = 0x90},
+    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x90, .abs_min = 0x90, .polarity = 1},
+    {.size_min = 0, .size_max = 255, .neutral = 0x00, .abs_max = 0xFF, .abs_min = 0x00},
+    {.size_min = 0, .size_max = 255, .neutral = 0x00, .abs_max = 0xFF, .abs_min = 0x00},
 };
 
 static DRAM_ATTR const struct ctrl_meta ps_mouse_axes_meta[ADAPTER_MAX_AXES] =
 {
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128, .polarity = 1},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128, .polarity = 1},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128, .polarity = 1},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128, .polarity = 1},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128},
 };
 
 struct ps_map {
@@ -80,7 +80,7 @@ struct ps_mouse_map {
     int32_t raw_axes[2];
 } __packed;
 
-static const uint32_t ps_mask[4] = {0xBB7F0FFF, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t ps_mask[4] = {0xBB7F0FFF, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t ps_desc[4] = {0x000000FF, 0x00000000, 0x00000000, 0x00000000};
 static DRAM_ATTR const uint32_t ps_btns_mask[32] = {
     0, 0, 0, 0,
@@ -92,7 +92,7 @@ static DRAM_ATTR const uint32_t ps_btns_mask[32] = {
     BIT(PS_L2), BIT(PS_L1), 0, BIT(PS_L3),
     BIT(PS_R2), BIT(PS_R1), 0, BIT(PS_R3),
 };
-static const uint8_t ps_btns_idx[32] = {
+static DRAM_ATTR const uint8_t ps_btns_idx[32] = {
     0, 0, 0, 0,
     0, 0, 0, 0,
     5, 4, 7, 6,
@@ -103,7 +103,7 @@ static const uint8_t ps_btns_idx[32] = {
     15, 13, 0, 0,
 };
 
-static const uint32_t ps_mouse_mask[4] = {0x110000F0, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t ps_mouse_mask[4] = {0x110000F0, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t ps_mouse_desc[4] = {0x000000F0, 0x00000000, 0x00000000, 0x00000000};
 static const uint32_t ps_mouse_btns_mask[32] = {
     0, 0, 0, 0,
@@ -116,7 +116,7 @@ static const uint32_t ps_mouse_btns_mask[32] = {
     BIT(PS_R1), 0, 0, 0,
 };
 
-static const uint32_t ps_kb_mask[4] = {0xE6FF0F0F, 0xFFFFFFFF, 0xFFFFFFFF, 0x0007FFFF};
+static const uint32_t ps_kb_mask[4] = {0xE6FF0F0F, 0xFFFFFFFF, 0xFFFFFFFF, 0x0007FFFF | BR_COMBO_MASK};
 static const uint32_t ps_kb_desc[4] = {0x00000000, 0x00000000, 0x00000000, 0x00000000};
 static const uint8_t ps_kb_scancode[KBM_MAX] = {
  /* KB_A, KB_D, KB_S, KB_W, MOUSE_X_LEFT, MOUSE_X_RIGHT, MOUSE_Y_DOWN MOUSE_Y_UP */
@@ -180,9 +180,10 @@ void IRAM_ATTR ps_init_buffer(int32_t dev_mode, struct wired_data *wired_data) {
             memset((void *)map, 0, sizeof(*map));
             map->buttons = 0xFFFF;
             map->analog_btn = 0x00;
-            for (uint32_t i = 0; i < ADAPTER_MAX_AXES; i++) {
+            for (uint32_t i = 0; i < 4; i++) {
                 map->axes[ps_axes_idx[i]] = ps_axes_meta[i].neutral;
             }
+            memset(map->pressure, 0x00, sizeof(map->pressure));
 
             map_mask->buttons = 0x0000;
             map_mask->sticks = 0x00000000;
@@ -192,7 +193,7 @@ void IRAM_ATTR ps_init_buffer(int32_t dev_mode, struct wired_data *wired_data) {
     }
 }
 
-void ps_meta_init(struct generic_ctrl *ctrl_data) {
+void ps_meta_init(struct wired_ctrl *ctrl_data) {
     memset((void *)ctrl_data, 0, sizeof(*ctrl_data)*WIRED_MAX_DEV);
 
     for (uint32_t i = 0; i < WIRED_MAX_DEV; i++) {
@@ -219,7 +220,7 @@ exit_axes_loop:
     }
 }
 
-static void ps_ctrl_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+static void ps_ctrl_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct ps_map map_tmp;
 
     memcpy((void *)&map_tmp, wired_data->output, sizeof(map_tmp));
@@ -252,7 +253,7 @@ static void ps_ctrl_from_generic(struct generic_ctrl *ctrl_data, struct wired_da
         }
     }
 
-    for (uint32_t i = 0; i < ADAPTER_MAX_AXES; i++) {
+    for (uint32_t i = 0; i < 4; i++) {
         if (ctrl_data->map_mask[0] & (axis_to_btn_mask(i) & ps_desc[0])) {
             if (ctrl_data->axes[i].value > ctrl_data->axes[i].meta->size_max) {
                 map_tmp.axes[ps_axes_idx[i]] = 255;
@@ -268,9 +269,16 @@ static void ps_ctrl_from_generic(struct generic_ctrl *ctrl_data, struct wired_da
     }
 
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp));
+
+#ifdef CONFIG_BLUERETRO_RAW_OUTPUT
+    printf("{\"log_type\": \"wired_output\", \"axes\": [%d, %d, %d, %d], \"btns\": [%d, %d]}\n",
+        map_tmp.axes[ps_axes_idx[0]], map_tmp.axes[ps_axes_idx[1]],
+        map_tmp.axes[ps_axes_idx[2]], map_tmp.axes[ps_axes_idx[3]],
+        map_tmp.buttons, map_tmp.analog_btn);
+#endif
 }
 
-static void ps_mouse_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+static void ps_mouse_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct ps_mouse_map map_tmp;
     int32_t *raw_axes = (int32_t *)(wired_data->output + 4);
 
@@ -303,7 +311,7 @@ static void ps_mouse_from_generic(struct generic_ctrl *ctrl_data, struct wired_d
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp) - 8);
 }
 
-static void ps_kb_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+static void ps_kb_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     if (!atomic_test_bit(&wired_data->flags, WIRED_KBMON_INIT)) {
         kbmon_init(ctrl_data->index, ps_kb_id_to_scancode);
         kbmon_set_typematic(ctrl_data->index, 1, 500000, 90000);
@@ -334,7 +342,7 @@ void ps_kb_id_to_scancode(uint32_t dev_id, uint8_t type, uint8_t id) {
     }
 }
 
-void ps_from_generic(int32_t dev_mode, struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+void ps_from_generic(int32_t dev_mode, struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     switch (dev_mode) {
         case DEV_KB:
             ps_kb_from_generic(ctrl_data, wired_data);
@@ -386,5 +394,5 @@ void IRAM_ATTR ps_gen_turbo_mask(struct wired_data *wired_data) {
         }
     }
 
-    wired_gen_turbo_mask_axes8(wired_data, map_mask->axes, ADAPTER_MAX_AXES, ps_axes_idx, ps_axes_meta);
+    wired_gen_turbo_mask_axes8(wired_data, map_mask->axes, 4, ps_axes_idx, ps_axes_meta);
 }

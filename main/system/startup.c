@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -372,6 +372,7 @@ static void do_core_init(void)
     err = esp_pthread_init();
     assert(err == ESP_OK && "Failed to init pthread module!");
 
+#if !CONFIG_APP_BUILD_TYPE_PURE_RAM_APP
 #if CONFIG_SPI_FLASH_ROM_IMPL
     spi_flash_rom_impl_init();
 #endif
@@ -383,6 +384,7 @@ static void do_core_init(void)
 #if CONFIG_SPI_FLASH_BROWNOUT_RESET
     spi_flash_needs_reset_check();
 #endif // CONFIG_SPI_FLASH_BROWNOUT_RESET
+#endif // !CONFIG_APP_BUILD_TYPE_PURE_RAM_APP
 
 #ifdef CONFIG_EFUSE_VIRTUAL
     ESP_LOGW(TAG, "eFuse virtual mode is enabled. If Secure boot or Flash encryption is enabled then it does not provide any security. FOR TESTING ONLY!");
@@ -392,6 +394,15 @@ static void do_core_init(void)
         esp_efuse_init_virtual_mode_in_flash(efuse_partition->address, efuse_partition->size);
     }
 #endif
+#endif
+
+#ifdef CONFIG_SECURE_FLASH_ENC_ENABLED
+    esp_flash_encryption_init_checks();
+#endif
+
+#if defined(CONFIG_SECURE_BOOT) || defined(CONFIG_SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT)
+    // Note: in some configs this may read flash, so placed after flash init
+    esp_secure_boot_init_checks();
 #endif
 
 #if CONFIG_SECURE_DISABLE_ROM_DL_MODE
@@ -406,15 +417,6 @@ static void do_core_init(void)
 
 #if CONFIG_ESP32_DISABLE_BASIC_ROM_CONSOLE
     esp_efuse_disable_basic_rom_console();
-#endif
-
-#ifdef CONFIG_SECURE_FLASH_ENC_ENABLED
-    esp_flash_encryption_init_checks();
-#endif
-
-#if defined(CONFIG_SECURE_BOOT) || defined(CONFIG_SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT)
-    // Note: in some configs this may read flash, so placed after flash init
-    esp_secure_boot_init_checks();
 #endif
 
 #ifdef ROM_LOG_MODE
@@ -513,11 +515,7 @@ static void start_cpu0_default(void)
 
     // Now that the application is about to start, disable boot watchdog
 #ifndef CONFIG_BOOTLOADER_WDT_DISABLE_IN_USER_CODE
-#if CONFIG_IDF_TARGET_ESP32C6 || CONFIG_IDF_TARGET_ESP32H2// ESP32H2, ESP32C6-TODO: IDF-5653
-    wdt_hal_context_t rtc_wdt_ctx = {.inst = WDT_RWDT, .rwdt_dev = &LP_WDT};
-#else
-    wdt_hal_context_t rtc_wdt_ctx = {.inst = WDT_RWDT, .rwdt_dev = &RTCCNTL};
-#endif
+    wdt_hal_context_t rtc_wdt_ctx = RWDT_HAL_CONTEXT_DEFAULT();
     wdt_hal_write_protect_disable(&rtc_wdt_ctx);
     wdt_hal_disable(&rtc_wdt_ctx);
     wdt_hal_write_protect_enable(&rtc_wdt_ctx);

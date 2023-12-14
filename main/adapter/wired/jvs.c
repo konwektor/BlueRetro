@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022, Jacques Gagnon
+ * Copyright (c) 2019-2023, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -39,8 +39,8 @@ static DRAM_ATTR const uint8_t jvs_axes_idx[JVS_AXES_MAX] =
 
 static DRAM_ATTR const struct ctrl_meta jvs_axes_meta[JVS_AXES_MAX] =
 {
-    {.size_min = -32768, .size_max = 32767, .neutral = 0x8000, .abs_max = 0x8000},
-    {.size_min = -32768, .size_max = 32767, .neutral = 0x8000, .abs_max = 0x8000},
+    {.size_min = -32768, .size_max = 32767, .neutral = 0x8000, .abs_max = 0x7FFF, .abs_min = 0x8000},
+    {.size_min = -32768, .size_max = 32767, .neutral = 0x8000, .abs_max = 0x7FFF, .abs_min = 0x8000},
 };
 
 struct jvs_map {
@@ -50,7 +50,7 @@ struct jvs_map {
     uint8_t test;
 } __packed;
 
-static const uint32_t jvs_mask[4] = {0xBBFF0F0F, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t jvs_mask[4] = {0xBBFF0F0F, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t jvs_desc[4] = {0x0000000F, 0x00000000, 0x00000000, 0x00000000};
 static DRAM_ATTR const uint32_t jvs_btns_mask[32] = {
     0, 0, 0, 0,
@@ -78,7 +78,7 @@ void IRAM_ATTR jvs_init_buffer(int32_t dev_mode, struct wired_data *wired_data) 
     map_mask->axes[1] = 0x0000;
 }
 
-void jvs_meta_init(struct generic_ctrl *ctrl_data) {
+void jvs_meta_init(struct wired_ctrl *ctrl_data) {
     memset((void *)ctrl_data, 0, sizeof(*ctrl_data)*4);
 
     for (uint32_t i = 0; i < WIRED_MAX_DEV; i++) {
@@ -90,7 +90,7 @@ void jvs_meta_init(struct generic_ctrl *ctrl_data) {
     }
 }
 
-void jvs_from_generic(int32_t dev_mode, struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+void jvs_from_generic(int32_t dev_mode, struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct jvs_map map_tmp;
     uint32_t map_mask = 0xFFFF;
 
@@ -153,6 +153,12 @@ void jvs_from_generic(int32_t dev_mode, struct generic_ctrl *ctrl_data, struct w
     }
 
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp));
+
+#ifdef CONFIG_BLUERETRO_RAW_OUTPUT
+    printf("{\"log_type\": \"wired_output\", \"axes\": [%d, %d], \"btns\": %d, \"COINS\": %d, \"TEST\": %d}\n",
+        map_tmp.axes[jvs_axes_idx[0]], map_tmp.axes[jvs_axes_idx[1]],
+        map_tmp.buttons, map_tmp.coins, map_tmp.test);
+#endif
 }
 
 void IRAM_ATTR jvs_gen_turbo_mask(struct wired_data *wired_data) {

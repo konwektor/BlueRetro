@@ -1,6 +1,5 @@
 #include <esp32/rom/ets_sys.h>
 #include "adapter/adapter.h"
-#include "adapter/config.h"
 #include "driver/i2c.h"
 #include <soc/i2c_periph.h>
 #include "ogx360_i2c.h"

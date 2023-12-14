@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022, Jacques Gagnon
+ * Copyright (c) 2019-2023, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,6 +9,7 @@
 #include "adapter/config.h"
 #include "adapter/kb_monitor.h"
 #include "adapter/wired/wired.h"
+#include "system/manager.h"
 #include "saturn.h"
 
 enum {
@@ -41,22 +42,22 @@ static DRAM_ATTR const uint8_t sega_mouse_axes_idx[ADAPTER_MAX_AXES] =
 
 static DRAM_ATTR const struct ctrl_meta saturn_axes_meta[ADAPTER_MAX_AXES] =
 {
-    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x80},
-    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x80, .polarity = 1},
-    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x80}, //NA
-    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x80, .polarity = 1}, //NA
-    {.size_min = 0, .size_max = 255, .neutral = 0x00, .abs_max = 0xFF},
-    {.size_min = 0, .size_max = 255, .neutral = 0x00, .abs_max = 0xFF},
+    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x7F, .abs_min = 0x80},
+    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x7F, .abs_min = 0x80, .polarity = 1},
+    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x7F, .abs_min = 0x80}, //NA
+    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x7F, .abs_min = 0x80, .polarity = 1}, //NA
+    {.size_min = 0, .size_max = 255, .neutral = 0x00, .abs_max = 0xFF, .abs_min = 0x00},
+    {.size_min = 0, .size_max = 255, .neutral = 0x00, .abs_max = 0xFF, .abs_min = 0x00},
 };
 
 static DRAM_ATTR const struct ctrl_meta sega_mouse_axes_meta[ADAPTER_MAX_AXES] =
 {
-    {.size_min = -256, .size_max = 255, .neutral = 0x00, .abs_max = 256},
-    {.size_min = -256, .size_max = 255, .neutral = 0x00, .abs_max = 256},
-    {.size_min = -256, .size_max = 255, .neutral = 0x00, .abs_max = 256},
-    {.size_min = -256, .size_max = 255, .neutral = 0x00, .abs_max = 256},
-    {.size_min = -256, .size_max = 255, .neutral = 0x00, .abs_max = 256},
-    {.size_min = -256, .size_max = 255, .neutral = 0x00, .abs_max = 256},
+    {.size_min = -256, .size_max = 255, .neutral = 0x00, .abs_max = 255, .abs_min = 256},
+    {.size_min = -256, .size_max = 255, .neutral = 0x00, .abs_max = 255, .abs_min = 256},
+    {.size_min = -256, .size_max = 255, .neutral = 0x00, .abs_max = 255, .abs_min = 256},
+    {.size_min = -256, .size_max = 255, .neutral = 0x00, .abs_max = 255, .abs_min = 256},
+    {.size_min = -256, .size_max = 255, .neutral = 0x00, .abs_max = 255, .abs_min = 256},
+    {.size_min = -256, .size_max = 255, .neutral = 0x00, .abs_max = 255, .abs_min = 256},
 };
 
 struct saturn_map {
@@ -84,9 +85,9 @@ struct sega_mouse_map {
     int32_t raw_axes[2];
 } __packed;
 
-static const uint32_t saturn_mask[4] = {0x331F0F00, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t saturn_mask[4] = {0x335F0F00, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t saturn_desc[4] = {0x00000000, 0x00000000, 0x00000000, 0x00000000};
-static const uint32_t saturn_3d_mask[4] = {0x331F0F0F, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t saturn_3d_mask[4] = {0x335F0F0F, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t saturn_3d_desc[4] = {0x1100000F, 0x00000000, 0x00000000, 0x00000000};
 static DRAM_ATTR const uint32_t saturn_btns_mask[32] = {
     0, 0, 0, 0,
@@ -99,7 +100,7 @@ static DRAM_ATTR const uint32_t saturn_btns_mask[32] = {
     BIT(SATURN_R), BIT(SATURN_Z), 0, 0,
 };
 
-static const uint32_t sega_mouse_mask[4] = {0x190100F0, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t sega_mouse_mask[4] = {0x190100F0, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t sega_mouse_desc[4] = {0x000000F0, 0x00000000, 0x00000000, 0x00000000};
 static const uint32_t sega_mouse_btns_mask[32] = {
     0, 0, 0, 0,
@@ -112,7 +113,7 @@ static const uint32_t sega_mouse_btns_mask[32] = {
     BIT(SATURN_B), 0, 0, 0,
 };
 
-static const uint32_t saturn_kb_mask[4] = {0xE6FF0F0F, 0xFFFFFFFF, 0xFFFFFFFF, 0x0007FFFF};
+static const uint32_t saturn_kb_mask[4] = {0xE6FF0F0F, 0xFFFFFFFF, 0xFFFFFFFF, 0x0007FFFF | BR_COMBO_MASK};
 static const uint32_t saturn_kb_desc[4] = {0x00000000, 0x00000000, 0x00000000, 0x00000000};
 static const uint8_t saturn_kb_scancode[KBM_MAX] = {
  /* Source: https://plutiedev.com/saturn-keyboard */
@@ -150,6 +151,26 @@ static const uint8_t saturn_kb_scancode[KBM_MAX] = {
  /* KB_RSHIFT, KB_RALT, KB_RWIN */
     0x59, 0x17, 0x00,
 };
+
+static void saturn_ctrl_special_action(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
+    /* Output config mode toggle GamePad/GamePadAlt */
+    if (ctrl_data->map_mask[0] & generic_btns_mask[PAD_MT]) {
+        if (ctrl_data->btns[0].value & generic_btns_mask[PAD_MT]) {
+            if (!atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE)) {
+                atomic_set_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
+            }
+        }
+        else {
+            if (atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE)) {
+                atomic_clear_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
+
+                config.out_cfg[ctrl_data->index].dev_mode &= 0x01;
+                config.out_cfg[ctrl_data->index].dev_mode ^= 0x01;
+                sys_mgr_cmd(SYS_MGR_CMD_WIRED_RST);
+            }
+        }
+    }
+}
 
 void IRAM_ATTR saturn_init_buffer(int32_t dev_mode, struct wired_data *wired_data) {
     switch (dev_mode) {
@@ -194,7 +215,7 @@ void IRAM_ATTR saturn_init_buffer(int32_t dev_mode, struct wired_data *wired_dat
     }
 }
 
-void saturn_meta_init(struct generic_ctrl *ctrl_data) {
+void saturn_meta_init(struct wired_ctrl *ctrl_data) {
     memset((void *)ctrl_data, 0, sizeof(*ctrl_data)*WIRED_MAX_DEV);
 
     for (uint32_t i = 0; i < WIRED_MAX_DEV; i++) {
@@ -226,7 +247,7 @@ exit_axes_loop:
     }
 }
 
-void saturn_ctrl_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+void saturn_ctrl_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct saturn_map map_tmp;
 
     memcpy((void *)&map_tmp, wired_data->output, sizeof(map_tmp));
@@ -237,12 +258,14 @@ void saturn_ctrl_from_generic(struct generic_ctrl *ctrl_data, struct wired_data 
                 map_tmp.buttons &= ~saturn_btns_mask[i];
                 wired_data->cnt_mask[i] = ctrl_data->btns[0].cnt_mask[i];
             }
-            else {
+            else if (!(config.out_cfg[ctrl_data->index].dev_mode == DEV_PAD_ALT && (i == PAD_LM || i == PAD_RM))) {
                 map_tmp.buttons |= saturn_btns_mask[i];
                 wired_data->cnt_mask[i] = 0;
             }
         }
     }
+
+    saturn_ctrl_special_action(ctrl_data, wired_data);
 
     if (config.out_cfg[ctrl_data->index].dev_mode == DEV_PAD_ALT) {
         for (uint32_t i = 0; i < ADAPTER_MAX_AXES; i++) {
@@ -264,23 +287,29 @@ void saturn_ctrl_from_generic(struct generic_ctrl *ctrl_data, struct wired_data 
         }
 
         if (map_tmp.axes[saturn_axes_idx[TRIG_L]] < 0x56) {
-            map_tmp.buttons &= ~BIT(SATURN_L);
-        }
-        else if (map_tmp.axes[saturn_axes_idx[TRIG_L]] > 0x8D) {
             map_tmp.buttons |= BIT(SATURN_L);
         }
+        else if (map_tmp.axes[saturn_axes_idx[TRIG_L]] > 0x8D) {
+            map_tmp.buttons &= ~BIT(SATURN_L);
+        }
         if (map_tmp.axes[saturn_axes_idx[TRIG_R]] < 0x56) {
-            map_tmp.buttons &= ~BIT(SATURN_R);
+            map_tmp.buttons |= BIT(SATURN_R);
         }
         else if (map_tmp.axes[saturn_axes_idx[TRIG_R]] > 0x8D) {
-            map_tmp.buttons |= BIT(SATURN_R);
+            map_tmp.buttons &= ~BIT(SATURN_R);
         }
     }
 
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp));
+
+#ifdef CONFIG_BLUERETRO_RAW_OUTPUT
+    printf("{\"log_type\": \"wired_output\", \"axes\": [%d, %d, %d, %d], \"btns\": %d}\n",
+        map_tmp.axes[saturn_axes_idx[0]], map_tmp.axes[saturn_axes_idx[1]],
+        map_tmp.axes[saturn_axes_idx[4]], map_tmp.axes[saturn_axes_idx[5]], map_tmp.buttons);
+#endif
 }
 
-static void saturn_mouse_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+static void saturn_mouse_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct sega_mouse_map map_tmp;
     int32_t *raw_axes = (int32_t *)(wired_data->output + 4);
 
@@ -313,7 +342,7 @@ static void saturn_mouse_from_generic(struct generic_ctrl *ctrl_data, struct wir
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp) - 8);
 }
 
-static void saturn_kb_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+static void saturn_kb_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     uint16_t buttons = *(uint16_t *)wired_data->output;
 
     if (!atomic_test_bit(&wired_data->flags, WIRED_KBMON_INIT)) {
@@ -354,7 +383,7 @@ void saturn_kb_id_to_scancode(uint32_t dev_id, uint8_t type, uint8_t id) {
     kbmon_set_code(dev_id, kb_buf, sizeof(kb_buf));
 }
 
-void saturn_from_generic(int32_t dev_mode, struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+void saturn_from_generic(int32_t dev_mode, struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     switch (dev_mode) {
         case DEV_KB:
             saturn_kb_from_generic(ctrl_data, wired_data);

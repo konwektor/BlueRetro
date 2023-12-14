@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022, Jacques Gagnon
+ * Copyright (c) 2019-2023, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -22,6 +22,7 @@
 #include "adapter/config.h"
 #include "adapter/kb_monitor.h"
 #include "adapter/wired/ps.h"
+#include "wired_bare.h"
 #include "ps_spi.h"
 #include "sdkconfig.h"
 
@@ -63,6 +64,9 @@ enum {
 #define P2_RXD_PIN 22
 #define P2_DSR_PIN 25
 
+#define P1_ANALOG_LED_PIN 12
+#define P2_ANALOG_LED_PIN 15
+
 #define PS_SPI_DTR 0
 #define PS_SPI_SCK 1
 #define PS_SPI_TXD 2
@@ -73,12 +77,11 @@ enum {
 #define PS_PORT_MAX 2
 #define MT_PORT_MAX 4
 
-#define SPI_LL_RST_MASK (SPI_OUT_RST | SPI_IN_RST | SPI_AHBM_RST | SPI_AHBM_FIFO_RST)
-#define SPI_LL_UNUSED_INT_MASK  (SPI_INT_EN | SPI_SLV_WR_STA_DONE | SPI_SLV_RD_STA_DONE | SPI_SLV_WR_BUF_DONE | SPI_SLV_RD_BUF_DONE)
-
 struct ps_ctrl_port {
+    struct spi_cfg cfg;
     spi_dev_t *spi_hw;
     uint8_t id;
+    uint8_t led_pin;
     uint8_t root_dev_type;
     uint8_t mt_state;
     uint8_t mt_first_port;
@@ -102,7 +105,48 @@ struct ps_ctrl_port {
     uint32_t game_id_len;
 };
 
-static struct ps_ctrl_port ps_ctrl_ports[PS_PORT_MAX] = {0};
+static struct ps_ctrl_port ps_ctrl_ports[PS_PORT_MAX] = {
+    {
+        .cfg = {
+            .hw = &SPI2,
+            .write_bit_order = 1,
+            .read_bit_order = 1,
+            /* Set Mode 3 as per ESP32 TRM, except ck_i_edge that need to be 1 for original PSX! */
+            .clk_idle_edge = 0,
+            .clk_i_edge = 1,
+            .miso_delay_mode = 1,
+            .miso_delay_num = 0,
+            .mosi_delay_mode = 0,
+            .mosi_delay_num = 0,
+            .write_bit_len = 8 - 1,
+            .read_bit_len = 8 - 1,
+            .inten = 1,
+        },
+        .id = 0,
+        .led_pin = P1_ANALOG_LED_PIN,
+        .spi_hw = &SPI2,
+    },
+    {
+        .cfg = {
+            .hw = &SPI3,
+            .write_bit_order = 1,
+            .read_bit_order = 1,
+            /* Set Mode 3 as per ESP32 TRM, except ck_i_edge that need to be 1 for original PSX! */
+            .clk_idle_edge = 0,
+            .clk_i_edge = 1,
+            .miso_delay_mode = 1,
+            .miso_delay_num = 0,
+            .mosi_delay_mode = 0,
+            .mosi_delay_num = 0,
+            .write_bit_len = 8 - 1,
+            .read_bit_len = 8 - 1,
+            .inten = 1,
+        },
+        .id = 1,
+        .led_pin = P2_ANALOG_LED_PIN,
+        .spi_hw = &SPI3,
+    }
+};
 
 static inline void load_mouse_axes(uint8_t port, uint8_t *axes) {
     uint8_t *relative = (uint8_t *)(wired_adapter.data[port].output + 2);
@@ -183,7 +227,8 @@ static void toggle_dsr(uint32_t port) {
 
 static void ps_analog_btn_hdlr(struct ps_ctrl_port *port, uint8_t id) {
     if (port->dev_type[id] != DEV_PSX_MOUSE && port->dev_type[id] != DEV_PSX_FLIGHT
-            && port->dev_type[id] != DEV_PSX_PS_2_KB_MOUSE_ADAPTER) {
+            && port->dev_type[id] != DEV_PSX_PS_2_KB_MOUSE_ADAPTER
+            && (port->dev_id[id] == 0x41 || port->dev_id[id] == 0x73)) {
         if (wired_adapter.data[id + port->mt_first_port].output[18]) {
             if (!port->analog_btn[id]) {
                 port->analog_btn[id] = 1;
@@ -196,9 +241,17 @@ static void ps_analog_btn_hdlr(struct ps_ctrl_port *port, uint8_t id) {
                 port->rumble_l_state[id] = 0;
                 if (port->dev_id[id] == 0x41) {
                     port->dev_id[id] = 0x73;
+                    port->dev_desc[id] = 0x3FFFF;
+                    if (id == 0) {
+                        gpio_set_level_iram(ps_ctrl_ports[port->mt_first_port ? 1 : 0].led_pin, 1);
+                    }
                 }
                 else {
                     port->dev_id[id] = 0x41;
+                    port->dev_desc[id] = 0;
+                    if (id == 0) {
+                        gpio_set_level_iram(ps_ctrl_ports[port->mt_first_port ? 1 : 0].led_pin, 0);
+                    }
                 }
             }
         }
@@ -248,9 +301,17 @@ static void ps_cmd_req_hdlr(struct ps_ctrl_port *port, uint8_t id, uint8_t cmd, 
                 port->rumble_l_state[id] = 0;
                 if (req[1] == 0x01) {
                     port->pend_dev_id[id] = 0x73;
+                    port->dev_desc[id] = 0x3FFFF;
+                    if (id == 0) {
+                        gpio_set_level_iram(ps_ctrl_ports[port->mt_first_port ? 1 : 0].led_pin, 1);
+                    }
                 }
                 else {
                     port->pend_dev_id[id] = 0x41;
+                    port->dev_desc[id] = 0;
+                    if (id == 0) {
+                        gpio_set_level_iram(ps_ctrl_ports[port->mt_first_port ? 1 : 0].led_pin, 0);
+                    }
                 }
             }
             break;
@@ -309,7 +370,7 @@ static void ps_cmd_rsp_hdlr(struct ps_ctrl_port *port, uint8_t id, uint8_t cmd, 
             *(uint32_t *)rsp = port->dev_desc[id];
             rsp += 4;
             *rsp++ = 0x00;
-            *rsp++ = 0x5A;
+            *rsp++ = (port->pend_dev_id[id] == 0x41) ? 0x00 : 0x5A;
             break;
         }
         case 0x44:
@@ -409,7 +470,26 @@ static void ps_cmd_rsp_hdlr(struct ps_ctrl_port *port, uint8_t id, uint8_t cmd, 
                     load_mouse_axes(id + port->mt_first_port, &rsp[2]);
                     break;
                 default:
-                    memcpy(rsp, wired_adapter.data[id + port->mt_first_port].output, size);
+                    *(uint16_t *)&rsp[0] = wired_adapter.data[id + port->mt_first_port].output16[0]
+                        | wired_adapter.data[id + port->mt_first_port].output_mask16[0];
+                    if (size >  2) {
+                        for (uint32_t i = 2; i < 6; ++i) {
+                            rsp[i] = (wired_adapter.data[id + port->mt_first_port].output_mask[i]) ?
+                                wired_adapter.data[id + port->mt_first_port].output_mask[i]
+                                : wired_adapter.data[id + port->mt_first_port].output[i];
+                        }
+                    }
+                    if (size > 6) {
+                        *(uint16_t *)&rsp[6] = wired_adapter.data[id + port->mt_first_port].output16[3]
+                            & wired_adapter.data[id + port->mt_first_port].output_mask16[3];
+                        *(uint32_t *)&rsp[8] = wired_adapter.data[id + port->mt_first_port].output32[2]
+                            & wired_adapter.data[id + port->mt_first_port].output_mask32[2];
+                        *(uint32_t *)&rsp[12] = wired_adapter.data[id + port->mt_first_port].output32[3]
+                            & wired_adapter.data[id + port->mt_first_port].output_mask32[3];
+                        *(uint16_t *)&rsp[16] = wired_adapter.data[id + port->mt_first_port].output16[8]
+                            & wired_adapter.data[id + port->mt_first_port].output_mask16[8];
+                    }
+                    ++wired_adapter.data[id + port->mt_first_port].frame_cnt;
                     break;
             }
             if (cmd != 0x42 && cmd != 0x43) {
@@ -627,12 +707,7 @@ static unsigned isr_dispatch(unsigned cause) {
     return 0;
 }
 
-void ps_spi_init(void) {
-    ps_ctrl_ports[0].id = 0;
-    ps_ctrl_ports[1].id = 1;
-    ps_ctrl_ports[0].spi_hw = &SPI2;
-    ps_ctrl_ports[1].spi_hw = &SPI3;
-
+void ps_spi_init(uint32_t package) {
     for (uint32_t i = 0; i < PS_PORT_MAX; i++) {
         memset(ps_ctrl_ports[i].dev_id, 0x41, sizeof(ps_ctrl_ports[0].dev_id));
         memset(ps_ctrl_ports[i].pend_dev_id, 0x41, sizeof(ps_ctrl_ports[0].pend_dev_id));
@@ -652,7 +727,7 @@ void ps_spi_init(void) {
         ps_ctrl_ports[i].rx_buf[0][27] = 0x42;
         ps_ctrl_ports[i].rx_buf[1][27] = 0x42;
         for (uint32_t j = 0; j < MT_PORT_MAX; j++) {
-             ps_ctrl_ports[i].dev_desc[j] = 0x3FFFF;
+             ps_ctrl_ports[i].dev_desc[j] = 0;
         }
     }
 
@@ -760,55 +835,7 @@ inner_break:
     periph_ll_enable_clk_clear_rst(PERIPH_VSPI_MODULE);
 
     for (uint32_t i = 0; i < PS_PORT_MAX; i++) {
-        spi_dev_t *spi_hw = ps_ctrl_ports[i].spi_hw;
-
-        spi_hw->clock.val = 0;
-        spi_hw->user.val = 0;
-        spi_hw->ctrl.val = 0;
-        spi_hw->slave.wr_rd_buf_en = 1; //no sure if needed
-        spi_hw->user.doutdin = 1; //we only support full duplex
-        spi_hw->user.sio = 0;
-        spi_hw->slave.slave_mode = 1;
-        spi_hw->dma_conf.val |= SPI_LL_RST_MASK;
-        spi_hw->dma_out_link.start = 0;
-        spi_hw->dma_in_link.start = 0;
-        spi_hw->dma_conf.val &= ~SPI_LL_RST_MASK;
-        spi_hw->slave.sync_reset = 1;
-        spi_hw->slave.sync_reset = 0;
-
-        //use all 64 bytes of the buffer
-        spi_hw->user.usr_miso_highpart = 0;
-        spi_hw->user.usr_mosi_highpart = 0;
-
-        //Disable unneeded ints
-        spi_hw->slave.val &= ~SPI_LL_UNUSED_INT_MASK;
-
-        /* PS is LSB first */
-        spi_hw->ctrl.wr_bit_order = 1;
-        spi_hw->ctrl.rd_bit_order = 1;
-
-        /* Set Mode 3 as per ESP32 TRM, except ck_i_edge that need to be 1 for original PSX! */
-        spi_hw->pin.ck_idle_edge = 0;
-        spi_hw->user.ck_i_edge = 1;
-        spi_hw->ctrl2.miso_delay_mode = 1;
-        spi_hw->ctrl2.miso_delay_num = 0;
-        spi_hw->ctrl2.mosi_delay_mode = 0;
-        spi_hw->ctrl2.mosi_delay_num = 0;
-
-        spi_hw->slave.sync_reset = 1;
-        spi_hw->slave.sync_reset = 0;
-
-        spi_hw->slv_wrbuf_dlen.bit_len = 8 - 1;
-        spi_hw->slv_rdbuf_dlen.bit_len = 8 - 1;
-
-        spi_hw->user.usr_miso = 1;
-        spi_hw->user.usr_mosi = 1;
-
-        spi_hw->data_buf[0] = 0xFF;
-
-        spi_hw->slave.trans_inten = 1;
-        spi_hw->slave.trans_done = 0;
-        spi_hw->cmd.usr = 1;
+        spi_init(&ps_ctrl_ports[i].cfg);
     }
 
     intexc_alloc_iram(ETS_SPI2_INTR_SOURCE, SPI2_HSPI_INTR_NUM, isr_dispatch);

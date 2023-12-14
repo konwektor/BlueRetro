@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022, Jacques Gagnon
+ * Copyright (c) 2019-2023, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -30,7 +30,7 @@ struct para_1p_map {
     uint32_t buttons_high;
 } __packed;
 
-static const uint32_t para_1p_mask[4] = {0x337F0F00, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t para_1p_mask[4] = {0x337F0F00, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t para_1p_desc[4] = {0x00000000, 0x00000000, 0x00000000, 0x00000000};
 static DRAM_ATTR const uint32_t para_1p_btns_mask[32] = {
     0, 0, 0, 0,
@@ -53,7 +53,7 @@ void IRAM_ATTR para_1p_init_buffer(int32_t dev_mode, struct wired_data *wired_da
     map_mask->buttons_high = 0;
 }
 
-void para_1p_meta_init(struct generic_ctrl *ctrl_data) {
+void para_1p_meta_init(struct wired_ctrl *ctrl_data) {
     memset((void *)ctrl_data, 0, sizeof(*ctrl_data)*WIRED_MAX_DEV);
 
     for (uint32_t i = 0; i < WIRED_MAX_DEV; i++) {
@@ -62,7 +62,7 @@ void para_1p_meta_init(struct generic_ctrl *ctrl_data) {
     }
 }
 
-void para_1p_from_generic(int32_t dev_mode, struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+void para_1p_from_generic(int32_t dev_mode, struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     if (ctrl_data->index < 1) {
         struct para_1p_map map_tmp;
         uint32_t map_mask = 0xFFFFFFFF;
@@ -104,6 +104,11 @@ void para_1p_from_generic(int32_t dev_mode, struct generic_ctrl *ctrl_data, stru
         GPIO.out1.val = map_tmp.buttons_high | turbo_map_mask->buttons_high;
 
         memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp));
+
+#ifdef CONFIG_BLUERETRO_RAW_OUTPUT
+        printf("{\"log_type\": \"wired_output\", \"btns\": [%ld, %ld]}\n",
+            map_tmp.buttons, map_tmp.buttons_high);
+#endif
     }
 }
 

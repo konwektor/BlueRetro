@@ -59,4 +59,9 @@ version.txt
 *.h4
 *.zip
 build/
+__pycache__/
+*.py[cod]
+.vscode/settings.json
+trace/
+**/.DS_Store
 

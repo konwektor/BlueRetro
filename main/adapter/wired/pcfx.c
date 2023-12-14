@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022, Jacques Gagnon
+ * Copyright (c) 2019-2023, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -40,12 +40,12 @@ static DRAM_ATTR const uint8_t pcfx_mouse_axes_idx[ADAPTER_MAX_AXES] =
 
 static DRAM_ATTR const struct ctrl_meta pcfx_mouse_axes_meta[ADAPTER_MAX_AXES] =
 {
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128, .polarity = 1},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128, .polarity = 1},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128, .polarity = 1},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128, .polarity = 1},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128},
 };
 
 struct pcfx_map {
@@ -62,7 +62,7 @@ struct pcfx_mouse_map {
     int32_t raw_axes[2];
 } __packed;
 
-static const uint32_t pcfx_mask[4] = {0xBB3F0F00, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t pcfx_mask[4] = {0xBB3F0F00, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t pcfx_desc[4] = {0x00000000, 0x00000000, 0x00000000, 0x00000000};
 static DRAM_ATTR const uint32_t pcfx_btns_mask[32] = {
     0, 0, 0, 0,
@@ -75,7 +75,7 @@ static DRAM_ATTR const uint32_t pcfx_btns_mask[32] = {
     BIT(PCFX_VI), BIT(PCFX_VI), 0, 0,
 };
 
-static const uint32_t pcfx_mouse_mask[4] = {0x110000F0, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t pcfx_mouse_mask[4] = {0x110000F0, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t pcfx_mouse_desc[4] = {0x000000F0, 0x00000000, 0x00000000, 0x00000000};
 static const uint32_t pcfx_mouse_btns_mask[32] = {
     0, 0, 0, 0,
@@ -116,7 +116,7 @@ void IRAM_ATTR pcfx_init_buffer(int32_t dev_mode, struct wired_data *wired_data)
     }
 }
 
-void pcfx_meta_init(struct generic_ctrl *ctrl_data) {
+void pcfx_meta_init(struct wired_ctrl *ctrl_data) {
     memset((void *)ctrl_data, 0, sizeof(*ctrl_data)*WIRED_MAX_DEV);
 
     for (uint32_t i = 0; i < WIRED_MAX_DEV; i++) {
@@ -136,7 +136,7 @@ void pcfx_meta_init(struct generic_ctrl *ctrl_data) {
     }
 }
 
-void pcfx_ctrl_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+void pcfx_ctrl_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct pcfx_map map_tmp;
     uint32_t map_mask = 0xFFFF;
 
@@ -189,9 +189,13 @@ void pcfx_ctrl_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *w
     }
 
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp));
+
+#ifdef CONFIG_BLUERETRO_RAW_OUTPUT
+    printf("{\"log_type\": \"wired_output\", \"btns\": %d}\n", map_tmp.buttons);
+#endif
 }
 
-static void pcfx_mouse_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+static void pcfx_mouse_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct pcfx_mouse_map map_tmp;
     int32_t *raw_axes = (int32_t *)(wired_data->output + 8);
 
@@ -224,7 +228,7 @@ static void pcfx_mouse_from_generic(struct generic_ctrl *ctrl_data, struct wired
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp) - 8);
 }
 
-void pcfx_from_generic(int32_t dev_mode, struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+void pcfx_from_generic(int32_t dev_mode, struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     switch (dev_mode) {
         case DEV_MOUSE:
             pcfx_mouse_from_generic(ctrl_data, wired_data);

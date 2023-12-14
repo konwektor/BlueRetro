@@ -1,9 +1,10 @@
 /*
- * Copyright (c) 2019-2022, Jacques Gagnon
+ * Copyright (c) 2019-2023, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include "bluetooth/host.h"
+#include "bluetooth/hci.h"
 #include "tools/util.h"
 #include "generic.h"
 #include "ps3.h"
@@ -26,21 +27,24 @@ static const struct bt_name_type bt_name_type[] = {
     {"Xbox Wireless Controller", BT_XBOX, BT_XBOX_XINPUT, 0},
     {"Xbox Adaptive Controller", BT_XBOX, BT_XBOX_ADAPTIVE, 0},
     {"Xbox Wireless Contr", BT_XBOX, BT_XBOX_XS, 0},
+    {"DualSense Wireless Controller", BT_PS, BT_PS5_DS, 0},
     {"Wireless Controller", BT_PS, BT_SUBTYPE_DEFAULT, 0},
     {"Nintendo RVL-CNT-01-UC", BT_WII, BT_WIIU_PRO, 0}, /* Must be before WII */
     {"Nintendo RVL-CNT-01", BT_WII, BT_SUBTYPE_DEFAULT, 0},
     {"Lic Pro Controller", BT_SW, BT_SW_POWERA, BIT(BT_QUIRK_FACE_BTNS_ROTATE_RIGHT)},
     {"Pro Controller", BT_SW, BT_SUBTYPE_DEFAULT, 0},
-    {"Joy-Con (L)", BT_SW, BT_SW_LEFT_JOYCON, BIT(BT_QUIRK_SW_LEFT_JOYCON)},
-    {"Joy-Con (R)", BT_SW, BT_SW_RIGHT_JOYCON, BIT(BT_QUIRK_SW_RIGHT_JOYCON)},
+    {"Joy-Con (L)", BT_SW, BT_SW_LEFT_JOYCON, 0},
+    {"Joy-Con (R)", BT_SW, BT_SW_RIGHT_JOYCON, 0},
+    {"SNES Controller", BT_SW, BT_SW_SNES, BIT(BT_QUIRK_TRIGGER_PRI_SEC_INVERT)},
     {"HVC Controller", BT_SW, BT_SW_NES, BIT(BT_QUIRK_FACE_BTNS_ROTATE_RIGHT) | BIT(BT_QUIRK_TRIGGER_PRI_SEC_INVERT)},
     {"NES Controller", BT_SW, BT_SW_NES, BIT(BT_QUIRK_FACE_BTNS_ROTATE_RIGHT) | BIT(BT_QUIRK_TRIGGER_PRI_SEC_INVERT)},
-    {"SNES Controller", BT_SW, BT_SW_SNES, BIT(BT_QUIRK_TRIGGER_PRI_SEC_INVERT)},
     {"N64 Controller", BT_SW, BT_SW_N64, 0},
     {"MD/Gen Control Pad", BT_SW, BT_SW_MD_GEN, 0},
     {"8BitDo N30 Modkit", BT_XBOX, BT_XBOX_XINPUT, BIT(BT_QUIRK_FACE_BTNS_ROTATE_RIGHT)},
     {"8BitDo GBros Adapter", BT_XBOX, BT_8BITDO_GBROS, 0},
     {"8Bitdo N64 GamePad", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, BIT(BT_QUIRK_8BITDO_N64)},
+    {"8BitDo N64 Modkit", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, BIT(BT_QUIRK_8BITDO_N64_MK)},
+    {"8BitDo NEOGEO GP", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, BIT(BT_QUIRK_TRIGGER_PRI_SEC_INVERT)},
     {"8BitDo M30 gamepad", BT_XBOX, BT_XBOX_XINPUT, BIT(BT_QUIRK_8BITDO_M30)},
     {"8BitDo S30 Modkit", BT_XBOX, BT_XBOX_XINPUT, BIT(BT_QUIRK_8BITDO_SATURN)},
     {"8Bitdo", BT_XBOX, BT_XBOX_XINPUT, 0}, /* 8bitdo catch all, tested with SF30 Pro */
@@ -49,6 +53,7 @@ static const struct bt_name_type bt_name_type[] = {
     {"BlueN64 Gamepad", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, BIT(BT_QUIRK_BLUEN64_N64)},
     {"Hyperkin Pad", BT_SW, BT_SW_HYPERKIN_ADMIRAL, 0},
     {"Stadia", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, BIT(BT_QUIRK_STADIA)},
+    {"OUYA Game Controller", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, BIT(BT_QUIRK_OUYA)},
 #endif
 };
 
@@ -71,7 +76,7 @@ static const bt_hid_hdlr_t bt_hid_hdlr_list[BT_TYPE_MAX] = {
 };
 
 static const bt_hid_cmd_t bt_hid_feedback_list[BT_TYPE_MAX] = {
-    NULL, /* BT_HID_GENERIC */
+    bt_hid_cmd_generic_rumble, /* BT_HID_GENERIC */
     bt_hid_cmd_ps3_set_conf, /* BT_PS3 */
     bt_hid_cmd_wii_set_feedback, /* BT_WII */
     bt_hid_cmd_xbox_rumble, /* BT_XBOX */
@@ -93,6 +98,8 @@ void bt_hid_set_type_flags_from_name(struct bt_dev *device, const char* name) {
 }
 
 void bt_hid_init(struct bt_dev *device) {
+    bt_hci_write_link_supervision_timeout(device);
+    //bt_host_update_sniff_interval();
     if (device->ids.type > BT_NONE && bt_hid_init_list[device->ids.type]) {
         bt_hid_init_list[device->ids.type](device);
     }

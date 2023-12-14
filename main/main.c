@@ -8,10 +8,11 @@
 #include <freertos/task.h>
 #include <esp_ota_ops.h>
 #include <esp32/rom/ets_sys.h>
+#include <soc/efuse_reg.h>
+#include <esp_efuse.h>
 #include "system/bare_metal_app_cpu.h"
 #include "system/core0_stall.h"
 #include "system/delay.h"
-#include "system/fpga_config.h"
 #include "system/fs.h"
 #include "system/led.h"
 #include "adapter/adapter.h"
@@ -19,10 +20,13 @@
 #include "adapter/config.h"
 #include "bluetooth/host.h"
 #include "wired/detect.h"
-#include "wired/wired_comm.h"
+#include "wired/wired_bare.h"
+#include "wired/wired_rtos.h"
 #include "adapter/memory_card.h"
 #include "system/manager.h"
 #include "sdkconfig.h"
+
+static uint32_t chip_package = EFUSE_RD_CHIP_VER_PKG_ESP32D0WDQ6;
 
 static void wired_init_task(void) {
 #ifdef CONFIG_BLUERETRO_SYSTEM_UNIVERSAL
@@ -66,16 +70,20 @@ static void wired_init_task(void) {
     adapter_q_fb(&fb_data);
 
     if (wired_adapter.system_id < WIRED_MAX) {
-        wired_comm_init();
+        wired_bare_init(chip_package);
     }
 }
 
 static void wl_init_task(void *arg) {
     uint32_t err = 0;
+
     const esp_partition_t *running = esp_ota_get_running_partition();
     esp_ota_img_states_t ota_state;
     esp_ota_get_state_partition(running, &ota_state);
-    err_led_init();
+
+    chip_package = esp_efuse_get_pkg_ver();
+
+    err_led_init(chip_package);
 
     core0_stall_init();
 
@@ -85,10 +93,6 @@ static void wl_init_task(void *arg) {
         err = 1;
         printf("FS init fail!\n");
     }
-#endif
-
-#ifdef CONFIG_BLUERETRO_SYSTEM_SEA_BOARD
-    fpga_config();
 #endif
 
     config_init(DEFAULT_CFG);
@@ -101,10 +105,14 @@ static void wl_init_task(void *arg) {
     }
 #endif
 
+    if (wired_adapter.system_id < WIRED_MAX) {
+        wired_rtos_init();
+    }
+
 #ifndef CONFIG_BLUERETRO_QEMU
     mc_init();
 
-    sys_mgr_init();
+    sys_mgr_init(chip_package);
 #endif
 
 #ifdef CONFIG_BLUERETRO_PKT_INJECTION
@@ -131,4 +139,3 @@ void app_main()
     start_app_cpu(wired_init_task);
     xTaskCreatePinnedToCore(wl_init_task, "wl_init_task", 2560, NULL, 10, NULL, 0);
 }
-

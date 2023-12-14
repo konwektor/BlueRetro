@@ -50,23 +50,19 @@ Or just go to [Releases](https://github.com/konwektor/BlueRetro/releases), and d
 Buying these commercial adapters help the continued development of the BlueRetro firmware!!\
 Thanks to all sponsors!!
 
-[<img src="https://www.willsconsolemodifications.co.uk/image/catalog/Logo.png" width="400"/>](https://www.willsconsolemodifications.co.uk/index.php?route=product/product&path=59_67&product_id=52)
-* PSUnoRetro by [WillConsole](https://twitter.com/WillConsole): PSX & PS2 single port dongle.\
-  https://www.willsconsolemodifications.co.uk/index.php?route=product/product&path=59_67&product_id=52
-
-<BR>
-
 [<img src="https://www.humblebazooka.com/images/HB_2021_white_rainbow_1200px.png" width="400"/>](https://www.humblebazooka.com)
 * JagBT by [Humble Bazooka](https://twitter.com/humblebazooka): Atari Jaguar single port dongle.\
-  https://www.humblebazooka.com/product/atari-jaguar-bluetooth-adapter/
+  https://www.humblebazooka.com/products/jag-bt-bluetooth-controller-adapter-for-the-atari-jaguar/
 * Neo Geo BT by [Humble Bazooka](https://twitter.com/humblebazooka): SNK Neo Geo single port dongle.\
-  https://www.humblebazooka.com/product/neo-geo-bt-bluetooth-adapter/
+  https://www.humblebazooka.com/products/neo-bt-neo-geo-bluetooth-adapter/
 * PCE BT by [Humble Bazooka](https://twitter.com/humblebazooka): NEC PC-Engine dongle.\
   https://www.humblebazooka.com/product/pce-bt-pc-engine-bluetooth-adapter/
 * Turbo BT by [Humble Bazooka](https://twitter.com/humblebazooka): NEC TurboGrafx-16 dongle.\
   https://www.humblebazooka.com/product/turbo-bt-turbografx-16-bluetooth-adapter/
 * 3DO BT by [Humble Bazooka](https://twitter.com/humblebazooka): 3DO dongle.\
   https://www.humblebazooka.com/products/3do-bt-3do-bluetooth-adapter
+* Saturn BT by [Humble Bazooka](https://twitter.com/humblebazooka): Saturn dongle.\
+  https://www.humblebazooka.com/products/saturn-bt-bluetooth-adapter-for-the-sega-saturn/
 
 <BR>
   
@@ -82,11 +78,13 @@ Thanks to all sponsors!!
 
 <BR>
   
-  [<img src="http://www.retroscaler.com/wp-content/uploads/2022/11/logo.png" width="400"/>](https://www.aliexpress.com/item/1005004114458491.html)
+  [<img src="http://www.retroscaler.com/wp-content/uploads/2023/06/logo.png" width="400"/>](https://www.aliexpress.com/item/1005004114458491.html)
 * RetroScaler BlueRetro Wireless Game Controllers Converter Adapter For PS1 PS2 by [RetroScaler](https://twitter.com/RetroScaler): PS1 & PS2 single port dongle.\
   https://www.aliexpress.com/item/1005004114458491.html
 * RetroScaler BlueRetro Motor Wireless Game Controllers Adapter For Nintendo GameCube by [RetroScaler](https://twitter.com/RetroScaler): GameCube single port dongle.\
   https://www.aliexpress.us/item/1005004917765807.html
+* RetroScaler BlueRetro Wireless Game Controller Adapter For SEGA DreamCast by [RetroScaler](https://twitter.com/RetroScaler): Dreamcast 4 players adapter.\
+  https://www.aliexpress.com/item/1005005362930850.html
 
 <BR>
   

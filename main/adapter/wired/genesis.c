@@ -1,11 +1,12 @@
 /*
- * Copyright (c) 2020-2022, Jacques Gagnon
+ * Copyright (c) 2020-2023, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <string.h>
 #include "adapter/config.h"
 #include "adapter/wired/wired.h"
+#include "system/manager.h"
 #include "zephyr/types.h"
 #include "tools/util.h"
 #include "genesis.h"
@@ -81,12 +82,12 @@ static DRAM_ATTR const uint8_t sega_mouse_axes_idx[ADAPTER_MAX_AXES] =
 
 static DRAM_ATTR const struct ctrl_meta sega_mouse_axes_meta[ADAPTER_MAX_AXES] =
 {
-    {.size_min = -256, .size_max = 255, .neutral = 0x00, .abs_max = 256},
-    {.size_min = -256, .size_max = 255, .neutral = 0x00, .abs_max = 256},
-    {.size_min = -256, .size_max = 255, .neutral = 0x00, .abs_max = 256},
-    {.size_min = -256, .size_max = 255, .neutral = 0x00, .abs_max = 256},
-    {.size_min = -256, .size_max = 255, .neutral = 0x00, .abs_max = 256},
-    {.size_min = -256, .size_max = 255, .neutral = 0x00, .abs_max = 256},
+    {.size_min = -256, .size_max = 255, .neutral = 0x00, .abs_max = 255, .abs_min = 256},
+    {.size_min = -256, .size_max = 255, .neutral = 0x00, .abs_max = 255, .abs_min = 256},
+    {.size_min = -256, .size_max = 255, .neutral = 0x00, .abs_max = 255, .abs_min = 256},
+    {.size_min = -256, .size_max = 255, .neutral = 0x00, .abs_max = 255, .abs_min = 256},
+    {.size_min = -256, .size_max = 255, .neutral = 0x00, .abs_max = 255, .abs_min = 256},
+    {.size_min = -256, .size_max = 255, .neutral = 0x00, .abs_max = 255, .abs_min = 256},
 };
 
 struct sega_mouse_map {
@@ -103,7 +104,7 @@ struct sega_mouse_map {
     int32_t raw_axes[2];
 } __packed;
 
-static const uint32_t sega_mouse_mask[4] = {0x190100F0, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t sega_mouse_mask[4] = {0x190100F0, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t sega_mouse_desc[4] = {0x000000F0, 0x00000000, 0x00000000, 0x00000000};
 static const uint32_t sega_mouse_btns_mask[32] = {
     0, 0, 0, 0,
@@ -122,7 +123,7 @@ struct genesis_map {
     uint16_t twh_buttons;
 } __packed;
 
-static const uint32_t genesis_mask[4] = {0x333F0F00, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t genesis_mask[4] = {0x337F0F00, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t genesis_desc[4] = {0x00000000, 0x00000000, 0x00000000, 0x00000000};
 static DRAM_ATTR const uint32_t genesis_btns_mask[2][3][32] = {
     {
@@ -208,7 +209,27 @@ static DRAM_ATTR const uint32_t genesis_twh_btns_mask[32] = {
     BIT(GENESIS_Z), BIT(GENESIS_Z), 0, 0,
 };
 
-static void sega_mouse_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+static void genesis_ctrl_special_action(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
+    /* Output config mode toggle GamePad/GamePadAlt */
+    if (ctrl_data->map_mask[0] & generic_btns_mask[PAD_MT]) {
+        if (ctrl_data->btns[0].value & generic_btns_mask[PAD_MT]) {
+            if (!atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE)) {
+                atomic_set_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
+            }
+        }
+        else {
+            if (atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE)) {
+                atomic_clear_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
+
+                config.out_cfg[ctrl_data->index].dev_mode &= 0x01;
+                config.out_cfg[ctrl_data->index].dev_mode ^= 0x01;
+                sys_mgr_cmd(SYS_MGR_CMD_WIRED_RST);
+            }
+        }
+    }
+}
+
+static void sega_mouse_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct sega_mouse_map map_tmp;
     int32_t *raw_axes = (int32_t *)(wired_data->output + 28);
 
@@ -241,7 +262,7 @@ static void sega_mouse_from_generic(struct generic_ctrl *ctrl_data, struct wired
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp) - 8);
 }
 
-static void genesis_std_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+static void genesis_std_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct genesis_map map_tmp;
     uint32_t map_mask[3];
     uint32_t map_mask_high[3];
@@ -283,10 +304,18 @@ static void genesis_std_from_generic(struct generic_ctrl *ctrl_data, struct wire
         }
     }
 
+    genesis_ctrl_special_action(ctrl_data, wired_data);
+
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp));
+
+#ifdef CONFIG_BLUERETRO_RAW_OUTPUT
+    printf("{\"log_type\": \"wired_output\", \"btns\": [%ld, %ld, %ld, %ld, %ld, %ld]}\n",
+        map_tmp.buttons[0], map_tmp.buttons[1], map_tmp.buttons[2],
+        map_tmp.buttons_high[0], map_tmp.buttons_high[1], map_tmp.buttons_high[2]);
+#endif
 }
 
-static void genesis_twh_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+static void genesis_twh_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct genesis_map map_tmp;
     uint32_t map_mask = 0xFFFF;
 
@@ -306,10 +335,12 @@ static void genesis_twh_from_generic(struct generic_ctrl *ctrl_data, struct wire
         }
     }
 
+    genesis_ctrl_special_action(ctrl_data, wired_data);
+
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp));
 }
 
-static void genesis_ea_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+static void genesis_ea_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct genesis_map map_tmp;
     uint32_t map_mask[3];
 
@@ -333,6 +364,8 @@ static void genesis_ea_from_generic(struct generic_ctrl *ctrl_data, struct wired
             }
         }
     }
+
+    genesis_ctrl_special_action(ctrl_data, wired_data);
 
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp));
 }
@@ -425,7 +458,7 @@ void IRAM_ATTR genesis_init_buffer(int32_t dev_mode, struct wired_data *wired_da
     }
 }
 
-void genesis_meta_init(struct generic_ctrl *ctrl_data) {
+void genesis_meta_init(struct wired_ctrl *ctrl_data) {
     memset((void *)ctrl_data, 0, sizeof(*ctrl_data)*WIRED_MAX_DEV);
 
     for (uint32_t i = 0; i < WIRED_MAX_DEV; i++) {
@@ -449,7 +482,7 @@ exit_axes_loop:
     }
 }
 
-void genesis_from_generic(int32_t dev_mode, struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+void genesis_from_generic(int32_t dev_mode, struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     switch (dev_mode) {
         //case DEV_KB:
         //    break;

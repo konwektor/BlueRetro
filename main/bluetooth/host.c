@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022, Jacques Gagnon
+ * Copyright (c) 2019-2023, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -35,7 +35,7 @@
 
 enum {
     /* BT CTRL flags */
-    BT_CTRL_READY= 0,
+    BT_CTRL_READY = 0,
     BT_HOST_DBG_MODE,
 };
 
@@ -85,27 +85,16 @@ static esp_vhci_host_callback_t vhci_host_cb = {
 
 #ifdef CONFIG_BLUERETRO_BT_H4_TRACE
 static void bt_h4_trace(uint8_t *data, uint16_t len, uint8_t dir) {
-    uint8_t col;
-    uint16_t byte, line;
-    uint16_t line_max = len/16;
-
-    if (len % 16)
-        line_max++;
-
     if (dir)
         printf("I ");
     else
         printf("O ");
 
-    printf("%.6f ", (float)esp_timer_get_time()/1000000);
-
-    for (byte = 0, line = 0; line < line_max; line++) {
-        printf("%06X", byte);
-        for (col = 0; col < 16 && byte < len; col++, byte++) {
-            printf(" %02X", data[byte]);
-        }
-        printf("\n");
+    printf("%06X", 0);
+    for (uint32_t i = 0; i < len; i++) {
+        printf(" %02X", data[i]);
     }
+    printf("\n");
 }
 #endif /* CONFIG_BLUERETRO_BT_H4_TRACE */
 
@@ -237,6 +226,9 @@ static void bt_tx_task(void *param) {
                 vRingbufferReturnItem(txq_hdl, (void *)packet);
             }
         }
+        else {
+            vTaskDelay(10 / portTICK_PERIOD_MS);
+        }
     }
 }
 
@@ -312,28 +304,6 @@ static void bt_host_task(void *param) {
                         }
                     }
                     atomic_clear_bit(&device->flags, BT_DEV_SDP_DATA);
-                }
-            }
-
-            /* Check if we stopped receiving reports */
-            if (atomic_test_bit(&device->flags, BT_DEV_REPORT_MON)) {
-                if (bt_data->base.report_cnt == bt_data->base.report_cnt_last) {
-                    device->report_stall_cnt++;
-                }
-                else {
-                    bt_data->base.report_cnt_last = bt_data->base.report_cnt;
-                    device->report_stall_cnt = 0;
-                }
-                if (device->report_stall_cnt > 5) {
-                    printf("# %s dev: %ld report stalled\n", __FUNCTION__, device->ids.id);
-                    device->report_stall_cnt = 0;
-                    bt_data->base.report_cnt = 0;
-
-                    switch (device->ids.type) {
-                        case BT_SW:
-                            bt_hci_exit_sniff_mode(device);
-                            break;
-                    }
                 }
             }
         }
@@ -444,6 +414,69 @@ static int bt_host_rx_pkt(uint8_t *data, uint16_t len) {
 #endif
 
     return 0;
+}
+
+void bt_host_update_sniff_interval(void) {
+    uint16_t sniff_interval = 0;
+    uint32_t bt_dev_cnt = bt_host_get_flag_dev_cnt(BT_DEV_HID_INTR_READY);
+
+    switch (bt_dev_cnt) {
+        case 0:
+            return;
+        case 1:
+            /* Do not set sniff mode if this is 1st device, exept Switch */
+            struct bt_dev *device = NULL;
+            bt_host_get_active_dev(&device);
+
+            if (device->ids.type == BT_SW) {
+                sniff_interval = 8;
+            }
+            else {
+                sniff_interval = 0;
+            }
+            break;
+        default:
+            sniff_interval = 16;
+            break;
+    }
+
+    printf("# %s bt_dev_cnt: %ld interval: %d\n", __FUNCTION__, bt_dev_cnt, sniff_interval);
+
+    for (uint32_t i = 0; i < BT_MAX_DEV; i++) {
+        struct bt_dev *device = &bt_dev[i];
+
+        if (atomic_test_bit(&device->flags, BT_DEV_HID_INTR_READY)) {
+
+            if ((sniff_interval && sniff_interval == device->sniff_interval &&
+                device->sniff_state == BT_SNIFF_SET) ||
+                (sniff_interval == 0 && device->sniff_state == BT_SNIFF_DISABLE)) {
+                continue;
+            }
+
+            switch(device->sniff_state) {
+                case BT_SNIFF_SET:
+                    bt_hci_exit_sniff_mode(device);
+                    device->sniff_state = BT_SNIFF_EXIT_PENDING;
+                    break;
+                case BT_SNIFF_DISABLE:
+                    bt_hci_sniff_mode(device, sniff_interval);
+                    device->sniff_state = BT_SNIFF_SET_PENDING;
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+}
+
+uint32_t bt_host_get_flag_dev_cnt(uint32_t flag) {
+    uint32_t cnt = 0;
+    for (uint32_t i = 0; i < BT_MAX_DEV; i++) {
+        if (atomic_test_bit(&bt_dev[i].flags, flag)) {
+            cnt++;
+        }
+    }
+    return cnt;
 }
 
 void bt_host_disconnect_all(void) {
@@ -569,7 +602,7 @@ int32_t bt_host_init(void) {
 
 #ifdef CONFIG_BLUERETRO_BT_TIMING_TESTS
     gpio_config_t io_conf = {0};
-    io_conf.intr_type = GPIO_PIN_INTR_DISABLE;
+    io_conf.intr_type = GPIO_INTR_DISABLE;
     io_conf.mode = GPIO_MODE_OUTPUT;
     io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
     io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
@@ -606,7 +639,7 @@ int32_t bt_host_init(void) {
     bt_host_load_le_keys_from_file(&bt_host_le_link_keys);
 
     xTaskCreatePinnedToCore(&bt_host_task, "bt_host_task", 3072, NULL, 5, NULL, 0);
-    xTaskCreatePinnedToCore(&bt_fb_task, "bt_fb_task", 2048, NULL, 10, NULL, 0);
+    xTaskCreatePinnedToCore(&bt_fb_task, "bt_fb_task", 3072, NULL, 10, NULL, 0);
     xTaskCreatePinnedToCore(&bt_tx_task, "bt_tx_task", 2048, NULL, 11, NULL, 0);
 
     if (bt_hci_init()) {
@@ -618,11 +651,15 @@ int32_t bt_host_init(void) {
 }
 
 int32_t bt_host_txq_add(uint8_t *packet, uint32_t packet_len) {
+#ifdef CONFIG_BLUERETRO_QEMU
+    return 0;
+#else
     UBaseType_t ret = xRingbufferSend(txq_hdl, (void *)packet, packet_len, portMAX_DELAY);
     if (ret != pdTRUE) {
         printf("# %s txq full!\n", __FUNCTION__);
     }
     return (ret == pdTRUE ? 0 : -1);
+#endif
 }
 
 int32_t bt_host_load_link_key(struct bt_hci_cp_link_key_reply *link_key_reply) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022, Jacques Gagnon
+ * Copyright (c) 2021-2023, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -55,12 +55,12 @@ static DRAM_ATTR const struct jag_6d_axes_idx jag_6d_axes_idx[ADAPTER_MAX_AXES] 
 
 static DRAM_ATTR const struct ctrl_meta jag_6d_axes_meta[ADAPTER_MAX_AXES] =
 {
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128},
-    {.size_min = 0, .size_max = 255, .neutral = 0x00, .abs_max = 255},
-    {.size_min = 0, .size_max = 255, .neutral = 0x00, .abs_max = 255},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128},
+    {.size_min = 0, .size_max = 255, .neutral = 0x00, .abs_max = 255, .abs_min = 0},
+    {.size_min = 0, .size_max = 255, .neutral = 0x00, .abs_max = 255, .abs_min = 0},
 };
 
 struct jag_map {
@@ -68,7 +68,7 @@ struct jag_map {
     uint32_t buttons_s1[3][4];
 } __packed;
 
-static const uint32_t jag_mask[4] = {0xBB7F0FFF, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t jag_mask[4] = {0xBB7F0FFF, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t jag_desc[4] = {0x00000000, 0x00000000, 0x00000000, 0x00000000};
 static DRAM_ATTR const uint32_t jag_btns_mask[][32] = {
     /* Pause, A, Up, Down, Left, Right */
@@ -117,7 +117,7 @@ static DRAM_ATTR const uint32_t jag_btns_mask[][32] = {
     },
 };
 
-static const uint32_t jag_6d_mask[4] = {0xFFFF7FFF, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t jag_6d_mask[4] = {0xFFFF7FFF, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t jag_6d_desc[4] = {0x110000FF, 0x00000000, 0x00000000, 0x00000000};
 static DRAM_ATTR const uint32_t jag_6d_btns_mask[][32] = {
     /* Pause, A, Up, Down, Left, Right */
@@ -221,7 +221,7 @@ void IRAM_ATTR jag_init_buffer(int32_t dev_mode, struct wired_data *wired_data) 
     }
 }
 
-void jag_meta_init(struct generic_ctrl *ctrl_data) {
+void jag_meta_init(struct wired_ctrl *ctrl_data) {
     memset((void *)ctrl_data, 0, sizeof(*ctrl_data)*WIRED_MAX_DEV);
 
     for (uint32_t i = 0; i < WIRED_MAX_DEV; i++) {
@@ -240,7 +240,7 @@ void jag_meta_init(struct generic_ctrl *ctrl_data) {
     }
 }
 
-static void jag_ctrl_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+static void jag_ctrl_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct jag_map map_tmp;
     uint32_t map_mask[4];
 
@@ -268,9 +268,14 @@ static void jag_ctrl_from_generic(struct generic_ctrl *ctrl_data, struct wired_d
     }
 
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp));
+
+#ifdef CONFIG_BLUERETRO_RAW_OUTPUT
+    printf("{\"log_type\": \"wired_output\", \"btns\": [%ld, %ld, %ld, %ld]}\n",
+        map_tmp.buttons[0], map_tmp.buttons[1], map_tmp.buttons[2], map_tmp.buttons[3]);
+#endif
 }
 
-static void jag_6d_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+static void jag_6d_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct jag_map map_tmp;
 
     memcpy((void *)&map_tmp, wired_data->output, sizeof(map_tmp));
@@ -325,9 +330,14 @@ static void jag_6d_from_generic(struct generic_ctrl *ctrl_data, struct wired_dat
     }
 
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp));
+
+#ifdef CONFIG_BLUERETRO_RAW_OUTPUT
+    printf("{\"log_type\": \"wired_output\", \"btns\": [%ld, %ld, %ld, %ld]}\n",
+        map_tmp.buttons[0], map_tmp.buttons[1], map_tmp.buttons[2], map_tmp.buttons[3]);
+#endif
 }
 
-void jag_from_generic(int32_t dev_mode, struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+void jag_from_generic(int32_t dev_mode, struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     switch (dev_mode) {
         case DEV_PAD_ALT:
             jag_6d_from_generic(ctrl_data, wired_data);

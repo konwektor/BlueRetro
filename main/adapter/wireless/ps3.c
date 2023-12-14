@@ -48,12 +48,12 @@ static const uint8_t ps3_axes_idx[ADAPTER_MAX_AXES] =
 
 static const struct ctrl_meta ps3_axes_meta[ADAPTER_MAX_AXES] =
 {
-    {.neutral = 0x80, .abs_max = 0x80},
-    {.neutral = 0x80, .abs_max = 0x80, .polarity = 1},
-    {.neutral = 0x80, .abs_max = 0x80},
-    {.neutral = 0x80, .abs_max = 0x80, .polarity = 1},
-    {.neutral = 0x00, .abs_max = 0xFF},
-    {.neutral = 0x00, .abs_max = 0xFF},
+    {.neutral = 0x80, .abs_max = 0x7F, .abs_min = 0x80},
+    {.neutral = 0x80, .abs_max = 0x7F, .abs_min = 0x80, .polarity = 1},
+    {.neutral = 0x80, .abs_max = 0x7F, .abs_min = 0x80},
+    {.neutral = 0x80, .abs_max = 0x7F, .abs_min = 0x80, .polarity = 1},
+    {.neutral = 0x00, .abs_max = 0xFF, .abs_min = 0x00},
+    {.neutral = 0x00, .abs_max = 0xFF, .abs_min = 0x00},
 };
 
 struct ps3_map {
@@ -86,8 +86,15 @@ static const uint32_t ps3_btns_mask[32] = {
     0, BIT(PS3_R1), 0, BIT(PS3_R3),
 };
 
-int32_t ps3_to_generic(struct bt_data *bt_data, struct generic_ctrl *ctrl_data) {
+int32_t ps3_to_generic(struct bt_data *bt_data, struct wireless_ctrl *ctrl_data) {
     struct ps3_map *map = (struct ps3_map *)bt_data->base.input;
+    struct ctrl_meta *meta = bt_data->raw_src_mappings[PAD].meta;
+
+#ifdef CONFIG_BLUERETRO_RAW_INPUT
+    printf("{\"log_type\": \"wireless_input\", \"report_id\": %ld, \"axes\": [%u, %u, %u, %u, %u, %u], \"btns\": %lu}\n",
+        bt_data->base.report_id, map->axes[ps3_axes_idx[0]], map->axes[ps3_axes_idx[1]], map->axes[ps3_axes_idx[2]],
+        map->axes[ps3_axes_idx[3]], map->axes[ps3_axes_idx[4]], map->axes[ps3_axes_idx[5]], map->buttons);
+#endif
 
     memset((void *)ctrl_data, 0, sizeof(*ctrl_data));
 
@@ -101,14 +108,17 @@ int32_t ps3_to_generic(struct bt_data *bt_data, struct generic_ctrl *ctrl_data) 
     }
 
     if (!atomic_test_bit(&bt_data->base.flags[PAD], BT_INIT)) {
+        memcpy(meta, ps3_axes_meta, sizeof(ps3_axes_meta));
         for (uint32_t i = 0; i < ADAPTER_MAX_AXES; i++) {
+            meta[i].abs_max *= MAX_PULL_BACK;
+            meta[i].abs_min *= MAX_PULL_BACK;
             bt_data->base.axes_cal[i] = -(map->axes[ps3_axes_idx[i]] - ps3_axes_meta[i].neutral);
         }
         atomic_set_bit(&bt_data->base.flags[PAD], BT_INIT);
     }
 
     for (uint32_t i = 0; i < ADAPTER_MAX_AXES; i++) {
-        ctrl_data->axes[i].meta = &ps3_axes_meta[i];
+        ctrl_data->axes[i].meta = &meta[i];
         ctrl_data->axes[i].value = map->axes[ps3_axes_idx[i]] - ps3_axes_meta[i].neutral + bt_data->base.axes_cal[i];
     }
 

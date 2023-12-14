@@ -22,7 +22,7 @@ static to_generic_t to_generic_func[BT_TYPE_MAX] = {
 };
 
 static fb_from_generic_t fb_from_generic_func[BT_TYPE_MAX] = {
-    NULL, /* BT_HID_GENERIC */
+    hid_fb_from_generic, /* BT_HID_GENERIC */
     ps3_fb_from_generic, /* BT_PS3 */
     wii_fb_from_generic, /* BT_WII */
     xbox_fb_from_generic, /* BT_XBOX */
@@ -30,7 +30,7 @@ static fb_from_generic_t fb_from_generic_func[BT_TYPE_MAX] = {
     sw_fb_from_generic, /* BT_SW */
 };
 
-int32_t wireless_to_generic(struct bt_data *bt_data, struct generic_ctrl *ctrl_data) {
+int32_t wireless_to_generic(struct bt_data *bt_data, struct wireless_ctrl *ctrl_data) {
     int32_t ret = -1;
 
     if (to_generic_func[bt_data->base.pids->type]) {

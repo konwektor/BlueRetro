@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022, Jacques Gagnon
+ * Copyright (c) 2019-2023, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -33,12 +33,12 @@ static DRAM_ATTR const uint8_t gc_axes_idx[ADAPTER_MAX_AXES] =
 
 static DRAM_ATTR const struct ctrl_meta gc_axes_meta[ADAPTER_MAX_AXES] =
 {
-    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x64},
-    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x64},
-    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x5C},
-    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x5C},
-    {.size_min = 0, .size_max = 255, .neutral = 0x20, .abs_max = 0xD0},
-    {.size_min = 0, .size_max = 255, .neutral = 0x20, .abs_max = 0xD0},
+    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x64, .abs_min = 0x64},
+    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x64, .abs_min = 0x64},
+    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x5C, .abs_min = 0x5C},
+    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x5C, .abs_min = 0x5C},
+    {.size_min = 0, .size_max = 255, .neutral = 0x20, .abs_max = 0xD0, .abs_min = 0x00},
+    {.size_min = 0, .size_max = 255, .neutral = 0x20, .abs_max = 0xD0, .abs_min = 0x00},
 };
 
 struct gc_map {
@@ -53,7 +53,7 @@ struct gc_kb_map {
     uint8_t xor;
 } __packed;
 
-static const uint32_t gc_mask[4] = {0x771F0FFF, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t gc_mask[4] = {0x771F0FFF, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t gc_desc[4] = {0x110000FF, 0x00000000, 0x00000000, 0x00000000};
 static DRAM_ATTR const uint32_t gc_btns_mask[32] = {
     0, 0, 0, 0,
@@ -66,7 +66,7 @@ static DRAM_ATTR const uint32_t gc_btns_mask[32] = {
     0, BIT(GC_Z), BIT(GC_R), 0,
 };
 
-static const uint32_t gc_kb_mask[4] = {0xE6FF0F0F, 0xFFFFFFFF, 0x1FBFFFFF, 0x0003C000};
+static const uint32_t gc_kb_mask[4] = {0xE6FF0F0F, 0xFFFFFFFF, 0x1FBFFFFF, 0x0003C000 | BR_COMBO_MASK};
 static const uint32_t gc_kb_desc[4] = {0x00000000, 0x00000000, 0x00000000, 0x00000000};
 static const uint8_t gc_kb_scancode[KBM_MAX] = {
  /* KB_A, KB_D, KB_S, KB_W, MOUSE_X_LEFT, MOUSE_X_RIGHT, MOUSE_Y_DOWN MOUSE_Y_UP */
@@ -127,7 +127,7 @@ void IRAM_ATTR gc_init_buffer(int32_t dev_mode, struct wired_data *wired_data) {
     }
 }
 
-void gc_meta_init(struct generic_ctrl *ctrl_data) {
+void gc_meta_init(struct wired_ctrl *ctrl_data) {
     memset((void *)ctrl_data, 0, sizeof(*ctrl_data)*4);
 
     for (uint32_t i = 0; i < WIRED_MAX_DEV; i++) {
@@ -148,7 +148,7 @@ void gc_meta_init(struct generic_ctrl *ctrl_data) {
     }
 }
 
-static void gc_ctrl_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+static void gc_ctrl_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct gc_map map_tmp;
     uint32_t map_mask = 0xFFFF;
 
@@ -184,9 +184,15 @@ static void gc_ctrl_from_generic(struct generic_ctrl *ctrl_data, struct wired_da
     }
 
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp));
+
+#ifdef CONFIG_BLUERETRO_RAW_OUTPUT
+    printf("{\"log_type\": \"wired_output\", \"axes\": [%d, %d, %d, %d, %d, %d], \"btns\": %d}\n",
+        map_tmp.axes[gc_axes_idx[0]], map_tmp.axes[gc_axes_idx[1]], map_tmp.axes[gc_axes_idx[2]],
+        map_tmp.axes[gc_axes_idx[3]], map_tmp.axes[gc_axes_idx[4]], map_tmp.axes[gc_axes_idx[5]], map_tmp.buttons);
+#endif
 }
 
-static void gc_kb_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+static void gc_kb_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct gc_kb_map map_tmp = {0};
     uint32_t code_idx = 0;
 
@@ -204,7 +210,7 @@ static void gc_kb_from_generic(struct generic_ctrl *ctrl_data, struct wired_data
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp));
 }
 
-void gc_from_generic(int32_t dev_mode, struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+void gc_from_generic(int32_t dev_mode, struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     switch (dev_mode) {
         case DEV_KB:
             gc_kb_from_generic(ctrl_data, wired_data);

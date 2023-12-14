@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022, Jacques Gagnon
+ * Copyright (c) 2019-2023, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -20,6 +20,7 @@
 #include "adapter/adapter.h"
 #include "adapter/config.h"
 #include "adapter/wired/pcfx.h"
+#include "wired_bare.h"
 #include "pcfx_spi.h"
 
 #define GPIO_INTR_NUM 19
@@ -38,12 +39,10 @@
 #define P2_CLK_MASK (1 << P2_CLK_PIN)
 #define P2_DATA_MASK (1 << P2_DATA_PIN)
 
-#define SPI_LL_RST_MASK (SPI_OUT_RST | SPI_IN_RST | SPI_AHBM_RST | SPI_AHBM_FIFO_RST)
-#define SPI_LL_UNUSED_INT_MASK  (SPI_INT_EN | SPI_SLV_WR_STA_DONE | SPI_SLV_RD_STA_DONE | SPI_SLV_WR_BUF_DONE | SPI_SLV_RD_BUF_DONE)
-
 #define PCFX_PORT_MAX 2
 
 struct pcfx_ctrl_port {
+    struct spi_cfg cfg;
     spi_dev_t *hw;
     uint32_t latch_pin;
     uint32_t clk_pin;
@@ -59,6 +58,20 @@ struct pcfx_ctrl_port {
 
 static struct pcfx_ctrl_port pcfx_ctrl_ports[PCFX_PORT_MAX] = {
     {
+        .cfg = {
+            .hw = &SPI2,
+            .write_bit_order = 1,
+            .read_bit_order = 1,
+            .clk_idle_edge = 1,
+            .clk_i_edge = 0,
+            .miso_delay_mode = 0,
+            .miso_delay_num = 2,
+            .mosi_delay_mode = 0,
+            .mosi_delay_num = 3,
+            .write_bit_len = 0,
+            .read_bit_len = 33 - 1, // Extra bit to remove small gitch on packet end
+            .inten = 0,
+        },
         .hw = &SPI2,
         .latch_pin = P1_LATCH_PIN,
         .clk_pin = P1_CLK_PIN,
@@ -72,6 +85,20 @@ static struct pcfx_ctrl_port pcfx_ctrl_ports[PCFX_PORT_MAX] = {
         .spi_mod = PERIPH_HSPI_MODULE,
     },
     {
+        .cfg = {
+            .hw = &SPI3,
+            .write_bit_order = 1,
+            .read_bit_order = 1,
+            .clk_idle_edge = 1,
+            .clk_i_edge = 0,
+            .miso_delay_mode = 0,
+            .miso_delay_num = 2,
+            .mosi_delay_mode = 0,
+            .mosi_delay_num = 3,
+            .write_bit_len = 0,
+            .read_bit_len = 33 - 1, // Extra bit to remove small gitch on packet end
+            .inten = 0,
+        },
         .hw = &SPI3,
         .latch_pin = P2_LATCH_PIN,
         .clk_pin = P2_CLK_PIN,
@@ -111,24 +138,12 @@ static inline void load_mouse_axes(uint8_t port, uint8_t *axes) {
     }
 }
 
-static inline void write_buffer(spi_dev_t *hw, const uint8_t *data, uint32_t len)
-{
-    for (int i = 0; i < len; i += 4) {
-        //Use memcpy to get around alignment issues for txdata
-        uint32_t word;
-        memcpy(&word, &data[i], 4);
-        hw->data_buf[(i / 4)] = word;
-    }
-}
-
-static void load_buffer(uint8_t port) {
+static inline void load_buffer(uint8_t port) {
     switch (config.out_cfg[port].dev_mode) {
         case DEV_PAD:
         {
             uint32_t tmp = wired_adapter.data[port].output32[0] & wired_adapter.data[port].output_mask32[0];
-            write_buffer(pcfx_ctrl_ports[port].hw, (uint8_t *)&tmp, 4);
-            ++wired_adapter.data[port].frame_cnt;
-            pcfx_gen_turbo_mask(&wired_adapter.data[port]);
+            pcfx_ctrl_ports[port].hw->data_buf[0] = tmp;
             break;
         }
         case DEV_MOUSE:
@@ -136,7 +151,7 @@ static void load_buffer(uint8_t port) {
             uint8_t tmp[4];
             load_mouse_axes(port, tmp);
             memcpy(&tmp[2], &wired_adapter.data[port].output[2], 2);
-            write_buffer(pcfx_ctrl_ports[port].hw, tmp, 4);
+            pcfx_ctrl_ports[port].hw->data_buf[0] = *(uint32_t *)tmp;
             break;
         }
     }
@@ -160,12 +175,14 @@ static unsigned latch_isr(unsigned cause) {
 
     p = &pcfx_ctrl_ports[port];
 
-    p->hw->data_buf[0] = 0x000000F0;
     p->hw->data_buf[1] = 0xFFFFFFFF;
     load_buffer(port);
     p->hw->slave.sync_reset = 1;
     p->hw->slave.trans_done = 0;
     p->hw->cmd.usr = 1;
+
+    ++wired_adapter.data[port].frame_cnt;
+    pcfx_gen_turbo_mask(&wired_adapter.data[port]);
 
 exit:
     if (high_io) GPIO.status1_w1tc.intr_st = high_io;
@@ -173,7 +190,7 @@ exit:
     return 0;
 }
 
-void pcfx_spi_init(void) {
+void pcfx_spi_init(uint32_t package) {
     gpio_config_t io_conf = {0};
 
     for (uint32_t i = 0; i < PCFX_PORT_MAX; i++) {
@@ -201,55 +218,11 @@ void pcfx_spi_init(void) {
         io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
         io_conf.pin_bit_mask = 1ULL << p->clk_pin;
         gpio_config_iram(&io_conf);
-        gpio_matrix_in(p->clk_pin, p->clk_sig, false);
+        gpio_matrix_in(p->clk_pin, p->clk_sig, true);
 
         periph_ll_enable_clk_clear_rst(p->spi_mod);
 
-        p->hw->clock.val = 0;
-        p->hw->user.val = 0;
-        p->hw->ctrl.val = 0;
-        p->hw->slave.wr_rd_buf_en = 1; //no sure if needed
-        p->hw->user.doutdin = 1; //we only support full duplex
-        p->hw->user.sio = 0;
-        p->hw->slave.slave_mode = 1;
-        p->hw->dma_conf.val |= SPI_LL_RST_MASK;
-        p->hw->dma_out_link.start = 0;
-        p->hw->dma_in_link.start = 0;
-        p->hw->dma_conf.val &= ~SPI_LL_RST_MASK;
-        p->hw->slave.sync_reset = 1;
-        p->hw->slave.sync_reset = 0;
-
-        //use all 64 bytes of the buffer
-        p->hw->user.usr_miso_highpart = 0;
-        p->hw->user.usr_mosi_highpart = 0;
-
-        //Disable unneeded ints
-        p->hw->slave.val &= ~SPI_LL_UNUSED_INT_MASK;
-
-        /* PCFX is LSB first */
-        p->hw->ctrl.wr_bit_order = 1;
-        p->hw->ctrl.rd_bit_order = 1;
-
-        /* Set Mode 0 as per ESP32 TRM, cause that work well for PCFX! */
-        p->hw->pin.ck_idle_edge = 1;
-        p->hw->user.ck_i_edge = 0;
-        p->hw->ctrl2.miso_delay_mode = 0;
-        p->hw->ctrl2.miso_delay_num = 0;
-        p->hw->ctrl2.mosi_delay_mode = 2;
-        p->hw->ctrl2.mosi_delay_num = 2;
-
-        p->hw->slave.sync_reset = 1;
-        p->hw->slave.sync_reset = 0;
-
-        p->hw->slv_wrbuf_dlen.bit_len = 0;
-        p->hw->slv_rdbuf_dlen.bit_len = 33 - 1; // Extra bit to remove small gitch on packet end
-
-        p->hw->user.usr_miso = 1;
-        p->hw->user.usr_mosi = 1;
-
-        p->hw->slave.trans_inten = 0;
-        p->hw->slave.trans_done = 0;
-        p->hw->cmd.usr = 1;
+        spi_init(&p->cfg);
     }
 
     intexc_alloc_iram(ETS_GPIO_INTR_SOURCE, GPIO_INTR_NUM, latch_isr);

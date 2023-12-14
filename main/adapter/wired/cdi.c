@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022, Jacques Gagnon
+ * Copyright (c) 2019-2023, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -28,12 +28,12 @@ static DRAM_ATTR const uint8_t cdi_axes_idx[ADAPTER_MAX_AXES] =
 
 static DRAM_ATTR const struct ctrl_meta cdi_axes_meta[ADAPTER_MAX_AXES] =
 {
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128, .polarity = 1},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128, .polarity = 1},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128, .polarity = 1},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128, .polarity = 1},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128},
 };
 
 struct cdi_map {
@@ -43,7 +43,7 @@ struct cdi_map {
     int32_t raw_axes[2];
 } __packed;
 
-static const uint32_t cdi_mask[4] = {0x0005000F, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t cdi_mask[4] = {0x0005000F, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t cdi_desc[4] = {0x0000000F, 0x00000000, 0x00000000, 0x00000000};
 static DRAM_ATTR const uint32_t cdi_btns_mask[32] = {
     0, 0, 0, 0,
@@ -56,7 +56,7 @@ static DRAM_ATTR const uint32_t cdi_btns_mask[32] = {
     0, 0, 0, 0,
 };
 
-static const uint32_t cdi_mouse_mask[4] = {0x190000F0, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t cdi_mouse_mask[4] = {0x190000F0, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t cdi_mouse_desc[4] = {0x000000F0, 0x00000000, 0x00000000, 0x00000000};
 static const uint32_t cdi_mouse_btns_mask[32] = {
     0, 0, 0, 0,
@@ -69,7 +69,7 @@ static const uint32_t cdi_mouse_btns_mask[32] = {
     BIT(CDI_1), 0, 0, 0,
 };
 
-static const uint32_t cdi_kb_mask[4] = {0xE6FF0F0F, 0xFFFFFFFF, 0xFFFFFFFF, 0x0007FFFF};
+static const uint32_t cdi_kb_mask[4] = {0xE6FF0F0F, 0xFFFFFFFF, 0xFFFFFFFF, 0x0007FFFF | BR_COMBO_MASK};
 static const uint32_t cdi_kb_desc[4] = {0x00000000, 0x00000000, 0x00000000, 0x00000000};
 
 /* Flash bite the bullet here, their is no dominant pattern between the special */
@@ -319,7 +319,7 @@ void IRAM_ATTR cdi_init_buffer(int32_t dev_mode, struct wired_data *wired_data) 
     }
 }
 
-void cdi_meta_init(struct generic_ctrl *ctrl_data) {
+void cdi_meta_init(struct wired_ctrl *ctrl_data) {
     memset((void *)ctrl_data, 0, sizeof(*ctrl_data)*WIRED_MAX_DEV);
 
     for (uint32_t i = 0; i < WIRED_MAX_DEV; i++) {
@@ -346,7 +346,7 @@ exit_axes_loop:
     }
 }
 
-void cdi_ctrl_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+void cdi_ctrl_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct cdi_map map_tmp;
     int32_t *raw_axes = (int32_t *)(wired_data->output + 8);
 
@@ -374,9 +374,14 @@ void cdi_ctrl_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wi
     }
 
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp) - 8);
+
+#ifdef CONFIG_BLUERETRO_RAW_OUTPUT
+    printf("{\"log_type\": \"wired_output\", \"axes\": [%ld, %ld], \"btns\": %d}\n",
+        raw_axes[cdi_axes_idx[0]], raw_axes[cdi_axes_idx[1]], map_tmp.buttons);
+#endif
 }
 
-static void cdi_mouse_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+static void cdi_mouse_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct cdi_map map_tmp;
     int32_t *raw_axes = (int32_t *)(wired_data->output + 8);
 
@@ -409,7 +414,7 @@ static void cdi_mouse_from_generic(struct generic_ctrl *ctrl_data, struct wired_
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp) - 8);
 }
 
-static void cdi_kb_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+static void cdi_kb_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     if (!atomic_test_bit(&wired_data->flags, WIRED_KBMON_INIT)) {
         kbmon_init(ctrl_data->index, cdi_kb_id_to_scancode);
         kbmon_set_typematic(ctrl_data->index, 1, 500000, 90000);
@@ -540,7 +545,7 @@ void cdi_kb_id_to_scancode(uint32_t dev_id, uint8_t type, uint8_t id) {
     }
 }
 
-void cdi_from_generic(int32_t dev_mode, struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+void cdi_from_generic(int32_t dev_mode, struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     switch (dev_mode) {
         case DEV_KB:
             cdi_kb_from_generic(ctrl_data, wired_data);

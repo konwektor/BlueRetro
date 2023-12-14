@@ -58,15 +58,15 @@ static DRAM_ATTR const int ogx360_analog_btns_mask[BUTTON_MASK_SIZE] = {
 
 static DRAM_ATTR const struct ctrl_meta ogx360_axes_meta[ADAPTER_MAX_AXES] =
 {
-    {.size_min = -32768, .size_max = 32767, .neutral = 0x00, .abs_max = 32767},
-    {.size_min = -32768, .size_max = 32767, .neutral = 0x00, .abs_max = 32767},
-    {.size_min = -32768, .size_max = 32767, .neutral = 0x00, .abs_max = 32767},
-    {.size_min = -32768, .size_max = 32767, .neutral = 0x00, .abs_max = 32767},
-    {.size_min = 0, .size_max = 255, .neutral = 0x00, .abs_max = 255},
-    {.size_min = 0, .size_max = 255, .neutral = 0x00, .abs_max = 255},
+    {.size_min = -32768, .size_max = 32767, .neutral = 0x00, .abs_max = 0x7FFF, .abs_min = 0x8000},
+    {.size_min = -32768, .size_max = 32767, .neutral = 0x00, .abs_max = 0x7FFF, .abs_min = 0x8000},
+    {.size_min = -32768, .size_max = 32767, .neutral = 0x00, .abs_max = 0x7FFF, .abs_min = 0x8000},
+    {.size_min = -32768, .size_max = 32767, .neutral = 0x00, .abs_max = 0x7FFF, .abs_min = 0x8000},
+    {.size_min = 0, .size_max = 255, .neutral = 0x00, .abs_max = 255, .abs_min = 0x00},
+    {.size_min = 0, .size_max = 255, .neutral = 0x00, .abs_max = 255, .abs_min = 0x00},
 };
 
-static const uint32_t ogx360_mask[4] = {0xBBFF0FFF, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t ogx360_mask[4] = {0xBBFF0FFF, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t ogx360_desc[4] = {0x110000FF, 0x00000000, 0x00000000, 0x00000000};
 
 typedef struct __attribute__((packed)) usbd_duke_out
@@ -91,7 +91,7 @@ typedef struct __attribute__((packed)) usbd_duke_in
 void ogx360_acc_toggle_fb(uint32_t wired_id, uint16_t left_motor, uint16_t right_motor);
 
 
-void ogx360_meta_init(struct generic_ctrl *ctrl_data) {
+void ogx360_meta_init(struct wired_ctrl *ctrl_data) {
     memset((void *)ctrl_data, 0, sizeof(*ctrl_data)*4);
 
     for (uint32_t i = 0; i < WIRED_MAX_DEV; i++) {
@@ -113,13 +113,13 @@ void ogx360_meta_init(struct generic_ctrl *ctrl_data) {
 }
 
 
-void ogx360_from_generic(int32_t dev_mode, struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {    
+void ogx360_from_generic(int32_t dev_mode, struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {    
     struct usbd_duke_out *duke_out = (struct usbd_duke_out*) wired_data->output;
     struct usbd_duke_in *duke_in = (struct usbd_duke_in*) wired_data->output;
     
     //Start Rumble
     struct bt_data *bt_data = &bt_adapter.data[wired_data->index];
-    if ( bt_data->base.pids->type == BT_XBOX || bt_data->base.pids->type == BT_WII || bt_data->base.pids->type == BT_PS) // Rumble is NOT hanging anymore PS4, WII controllers, untested on the rest.
+    if ( bt_data->base.pids->type == BT_XBOX || bt_data->base.pids->type == BT_WII || bt_data->base.pids->type == BT_PS || bt_data->base.pids->type == BT_PS3) // Rumble is hanging PS4 controllers, untested on the rest.
     {
         if (duke_in->startByte == 0x00 && duke_in->bLength == 6)
         {

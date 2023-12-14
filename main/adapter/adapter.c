@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022, Jacques Gagnon
+ * Copyright (c) 2019-2023, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -38,11 +38,12 @@ const uint32_t generic_btns_mask[32] = {
     BIT(PAD_RM), BIT(PAD_RS), BIT(PAD_RT), BIT(PAD_RJ),
 };
 
-struct generic_ctrl *ctrl_input;
-struct generic_ctrl *ctrl_output;
+struct wireless_ctrl *ctrl_input;
+struct wired_ctrl *ctrl_output;
 struct generic_fb fb_input;
 struct bt_adapter bt_adapter = {0};
 struct wired_adapter wired_adapter = {0};
+static uint32_t adapter_out_mask[WIRED_MAX_DEV] = {0};
 
 static uint32_t btn_id_to_btn_idx(uint8_t btn_id) {
     if (btn_id < 32) {
@@ -61,7 +62,7 @@ static uint32_t btn_id_to_btn_idx(uint8_t btn_id) {
 
 static uint32_t adapter_map_from_axis(struct map_cfg * map_cfg) {
     uint32_t out_mask = BIT(map_cfg->dst_id);
-    struct generic_ctrl *out = &ctrl_output[map_cfg->dst_id];
+    struct wired_ctrl *out = &ctrl_output[map_cfg->dst_id];
     uint8_t src = map_cfg->src_btn;
     uint8_t dst = map_cfg->dst_btn;
     uint32_t dst_mask = BIT(dst & 0x1F);
@@ -81,23 +82,39 @@ static uint32_t adapter_map_from_axis(struct map_cfg * map_cfg) {
 
         /* Check if the srv value sign match the src mapping sign */
         if (sign_check >= 0) {
+            /* Get proper abs_max base on sign and update max if current value is over */
+            int32_t src_abs_max;
+            if (src_sign > 0) {
+                if (abs_src_value > ctrl_input->axes[src_axis_idx].meta->abs_max) {
+                    ctrl_input->axes[src_axis_idx].meta->abs_max = abs_src_value;
+                }
+                src_abs_max = ctrl_input->axes[src_axis_idx].meta->abs_max;
+            }
+            else {
+                if (abs_src_value > ctrl_input->axes[src_axis_idx].meta->abs_min) {
+                    ctrl_input->axes[src_axis_idx].meta->abs_min = abs_src_value;
+                }
+                src_abs_max = ctrl_input->axes[src_axis_idx].meta->abs_min;
+            }
+
             /* Check if dst is an axis */
             if (dst_mask & out->desc[dst_btn_idx]) {
                 /* Keep track of source axis type */
                 out->axes[dst_axis_idx].relative = ctrl_input->axes[src_axis_idx].meta->relative;
                 /* Dst is an axis */
-                int32_t deadzone = (int32_t)(((float)map_cfg->perc_deadzone/10000) * ctrl_input->axes[src_axis_idx].meta->abs_max) + ctrl_input->axes[src_axis_idx].meta->deadzone;
+                int32_t deadzone = (int32_t)(((float)map_cfg->perc_deadzone / 10000) * src_abs_max) + ctrl_input->axes[src_axis_idx].meta->deadzone;
                 /* Check if axis over deadzone */
                 if (abs_src_value > deadzone) {
                     int32_t value = abs_src_value - deadzone;
                     int32_t dst_sign = btn_sign(out->axes[dst_axis_idx].meta->polarity, dst);
+                    int32_t dst_abs_max = (dst_sign > 0) ? out->axes[dst_axis_idx].meta->abs_max : out->axes[dst_axis_idx].meta->abs_min;
                     float scale, fvalue;
                     switch (map_cfg->algo & 0xF) {
                         case LINEAR:
-                            scale = ((float)out->axes[dst_axis_idx].meta->abs_max / (ctrl_input->axes[src_axis_idx].meta->abs_max - deadzone)) * (((float)map_cfg->perc_max)/100);
+                            scale = ((float)dst_abs_max / (src_abs_max - deadzone)) * (((float)map_cfg->perc_max) / 100);
                             break;
                         default:
-                            scale = ((float)map_cfg->perc_max)/100;
+                            scale = ((float)map_cfg->perc_max) / 100;
                             break;
 
                     }
@@ -112,9 +129,9 @@ static uint32_t adapter_map_from_axis(struct map_cfg * map_cfg) {
             }
             else {
                 /* Dst is a button */
-                int32_t threshold = (int32_t)(((float)map_cfg->perc_threshold/100) * ctrl_input->axes[src_axis_idx].meta->abs_max);
+                int32_t threshold = (int32_t)(((float)map_cfg->perc_threshold / 100) * src_abs_max);
                 /* Check if axis over threshold */
-                if (abs_src_value > threshold) {
+                if (abs_src_value >= threshold) {
                     out->btns[dst_btn_idx].value |= dst_mask;
                     out->btns[dst_btn_idx].cnt_mask[dst & 0x1F] = map_cfg->turbo;
                 }
@@ -129,7 +146,7 @@ static uint32_t adapter_map_from_axis(struct map_cfg * map_cfg) {
 
 static uint32_t adapter_map_from_btn(struct map_cfg * map_cfg, uint32_t src_mask, uint32_t src_btn_idx) {
     uint32_t out_mask = BIT(map_cfg->dst_id);
-    struct generic_ctrl *out = &ctrl_output[map_cfg->dst_id];
+    struct wired_ctrl *out = &ctrl_output[map_cfg->dst_id];
     uint8_t dst = map_cfg->dst_btn;
     uint32_t dst_mask = BIT(dst & 0x1F);
     uint32_t dst_btn_idx = btn_id_to_btn_idx(dst);
@@ -147,9 +164,9 @@ static uint32_t adapter_map_from_btn(struct map_cfg * map_cfg, uint32_t src_mask
                     return 0;
                 }
                 else {
-                    float fvalue = out->axes[axis_id].meta->abs_max
-                                * btn_sign(out->axes[axis_id].meta->polarity, dst)
-                                * (((float)map_cfg->perc_max)/100);
+                    int32_t dst_sign = btn_sign(out->axes[axis_id].meta->polarity, dst);
+                    int32_t dst_abs_max = (dst_sign > 0) ? out->axes[axis_id].meta->abs_max : out->axes[axis_id].meta->abs_min;
+                    float fvalue = dst_sign * dst_abs_max * (((float)map_cfg->perc_max) / 100);
                     int32_t value = (int32_t)fvalue;
 
                     if (abs(value) > abs(out->axes[axis_id].value)) {
@@ -207,6 +224,10 @@ static void adapter_fb_stop_cb(void* arg) {
     adapter_fb_stop_timer_stop((uint8_t)(uintptr_t)arg);
 }
 
+uint32_t adapter_get_out_mask(uint8_t dev_id) {
+    return adapter_out_mask[dev_id];
+}
+
 int32_t btn_id_to_axis(uint8_t btn_id) {
     switch (btn_id) {
         case PAD_LX_LEFT:
@@ -235,6 +256,16 @@ int32_t btn_id_to_axis(uint8_t btn_id) {
             return TRIG_R;
     }
     return AXIS_NONE;
+}
+
+uint8_t btn_is_axis(uint8_t dst_id, uint8_t dst_btn) {
+    struct wired_ctrl *out = &ctrl_output[dst_id];
+    uint32_t dst_mask = BIT(dst_btn & 0x1F);
+    uint32_t dst_btn_idx = btn_id_to_btn_idx(dst_btn);
+    if (dst_mask & out->desc[dst_btn_idx]) {
+        return 1;
+    }
+    return 0;
 }
 
 uint32_t axis_to_btn_mask(uint8_t axis) {
@@ -315,37 +346,42 @@ void adapter_bridge(struct bt_data *bt_data) {
             return;
         }
 
-        sys_macro_hdl(ctrl_input, &bt_data->base.flags[PAD]);
-
 #ifdef CONFIG_BLUERETRO_ADAPTER_INPUT_DBG
-        adapter_debug_print(ctrl_input);
+#ifdef CONFIG_BLUERETRO_JSON_DBG
+        printf("{\"log_type\": \"generic_input\"");
+#endif
+        adapter_debug_wireless_print(ctrl_input);
+#endif
 #ifdef CONFIG_BLUERETRO_ADAPTER_RUMBLE_DBG
         if (ctrl_input->btns[0].value & BIT(PAD_RB_DOWN)) {
             uint8_t tmp = 0;
             adapter_q_fb(&tmp, 1);
         }
 #endif
-#else
         if (wired_adapter.system_id != WIRED_AUTO) {
             if (wired_meta_init(ctrl_output)) {
                 /* Unsupported system */
                 return;
             }
 
-            out_mask = adapter_mapping(&config.in_cfg[bt_data->base.pids->out_idx]);
+            adapter_out_mask[bt_data->base.pids->out_idx] =
+                out_mask = adapter_mapping(&config.in_cfg[bt_data->base.pids->out_idx]);
 
 #ifdef CONFIG_BLUERETRO_ADAPTER_INPUT_MAP_DBG
-            adapter_debug_print(&ctrl_output[0]);
-#else
+#ifdef CONFIG_BLUERETRO_JSON_DBG
+            printf("{\"log_type\": \"mapped_input\"");
+#endif
+            adapter_debug_wired_print(&ctrl_output[0]);
+#endif
+            ctrl_output[bt_data->base.pids->out_idx].index = bt_data->base.pids->out_idx;
+            sys_macro_hdl(&ctrl_output[bt_data->base.pids->out_idx], &bt_data->base.flags[PAD]);
             for (uint32_t i = 0; out_mask; i++, out_mask >>= 1) {
                 if (out_mask & 0x1) {
                     ctrl_output[i].index = i;
                     wired_from_generic(config.out_cfg[i].dev_mode, &ctrl_output[i], &wired_adapter.data[i]);
                 }
             }
-#endif /* CONFIG_BLUERETRO_ADAPTER_INPUT_MAP_DBG */
         }
-#endif /* CONFIG_BLUERETRO_ADAPTER_INPUT_DBG */
     }
 }
 
@@ -395,11 +431,11 @@ void adapter_init(void) {
     wired_adapter.system_id = WIRED_AUTO;
 
     /* Save regular DRAM by allocating big sruct w/ only 32bits access in IRAM */
-    ctrl_input = heap_caps_malloc(sizeof(struct generic_ctrl), MALLOC_CAP_32BIT);
+    ctrl_input = heap_caps_malloc(sizeof(struct wireless_ctrl), MALLOC_CAP_32BIT);
     if (ctrl_input == NULL) {
         printf("# %s ctrl_input alloc fail\n", __FUNCTION__);
     }
-    ctrl_output = heap_caps_malloc(sizeof(struct generic_ctrl) * WIRED_MAX_DEV, MALLOC_CAP_32BIT);
+    ctrl_output = heap_caps_malloc(sizeof(struct wired_ctrl) * WIRED_MAX_DEV, MALLOC_CAP_32BIT);
     if (ctrl_output == NULL) {
         printf("# %s ctrl_output alloc fail\n", __FUNCTION__);
     }
@@ -417,5 +453,11 @@ void adapter_init(void) {
     wired_adapter.input_q_hdl = queue_bss_init(16, sizeof(struct raw_fb));
     if (wired_adapter.input_q_hdl == NULL) {
         ets_printf("# %s: Failed to create fb queue\n", __FUNCTION__);
+    }
+}
+
+void adapter_meta_init(void) {
+    if (wired_adapter.system_id != WIRED_AUTO) {
+        wired_meta_init(ctrl_output);
     }
 }

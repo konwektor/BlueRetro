@@ -1,8 +1,12 @@
 /*
- * Copyright (c) 2019-2022, Jacques Gagnon
+ * Copyright (c) 2019-2023, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <stdint.h>
+#include "jag_io.h"
+#include "sdkconfig.h"
+#if defined (CONFIG_BLUERETRO_SYSTEM_JAGUAR)
 #include <string.h>
 #include "zephyr/types.h"
 #include "tools/util.h"
@@ -13,7 +17,6 @@
 #include "system/delay.h"
 #include "system/gpio.h"
 #include "system/intr.h"
-#include "jag_io.h"
 
 #define P1_J0_PIN 32
 #define P1_J1_PIN 33
@@ -434,16 +437,20 @@ static void jag_ctrl_task(void) {
         }
     }
 }
+#endif /* defined (CONFIG_BLUERETRO_SYSTEM_JAGUAR */
 
 void jag_io_force_update(void) {
+#if defined (CONFIG_BLUERETRO_SYSTEM_JAGUAR)
     uint32_t idx, cur_in1 = GPIO.in1.val;
 
     idx = (((cur_in1 & 0x18) >> 1) | (cur_in1 & 0x3)) & 0xF;
 
     GPIO.out = *map[bank[socket_idx[idx]]][idx];
+#endif /* defined (CONFIG_BLUERETRO_SYSTEM_JAGUAR */
 }
 
-void jag_io_init(void) {
+void jag_io_init(uint32_t package) {
+#if defined (CONFIG_BLUERETRO_SYSTEM_JAGUAR)
     gpio_config_t io_conf = {0};
     uint8_t inputs[] = {P1_J0_PIN, P1_J1_PIN, P1_J2_PIN, P1_J3_PIN};
     uint8_t outputs[] = {P1_J8_PIN, P1_J9_PIN, P1_J10_PIN, P1_J11_PIN, P1_B0_PIN, P1_B1_PIN};
@@ -484,4 +491,5 @@ void jag_io_init(void) {
         map_mask = map_std_tt_mask;
     }
     jag_ctrl_task();
+#endif /* defined (CONFIG_BLUERETRO_SYSTEM_JAGUAR */
 }

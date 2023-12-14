@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022, Jacques Gagnon
+ * Copyright (c) 2019-2023, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -16,7 +16,7 @@
 #include "tools/util.h"
 #include "system/led.h"
 #include "adapter/config.h"
-#include "wired/wired_comm.h"
+#include "wired/wired_bare.h"
 #include "zephyr/uuid.h"
 
 #define BT_INQUIRY_MAX 10
@@ -86,6 +86,7 @@ static void bt_hci_cmd_read_remote_ext_features(void *handle);
 //static void bt_hci_cmd_read_remote_version_info(uint16_t handle);
 static void bt_hci_cmd_io_capability_reply(void *bdaddr);
 static void bt_hci_cmd_user_confirm_reply(void *bdaddr);
+static void bt_hci_cmd_sniff_mode(void *handle, uint16_t interval);
 static void bt_hci_cmd_exit_sniff_mode(void *handle);
 static void bt_hci_cmd_switch_role(void *cp);
 //static void bt_hci_cmd_read_link_policy(void *handle);
@@ -127,6 +128,9 @@ static void bt_hci_cmd_read_bd_addr(void *cp);
 //static void bt_hci_cmd_read_data_block_size(void *cp);
 //static void bt_hci_cmd_read_local_codecs(void *cp);
 //static void bt_hci_cmd_read_local_sp_options(void *cp);
+#ifdef CONFIG_BLUERETRO_BT_SSP_DBG
+static void bt_hci_cmd_write_ssp_dbg_mode(void *cp);
+#endif
 static void bt_hci_cmd_le_read_buffer_size(void *cp);
 static void bt_hci_cmd_le_set_adv_param(void *cp);
 static void bt_hci_cmd_le_set_adv_data(void *cp);
@@ -190,6 +194,9 @@ static const struct bt_hci_cmd_cp bt_hci_config[] = {
     {bt_hci_cmd_write_hold_mode_act, NULL},
     {bt_hci_cmd_write_scan_enable, NULL},
     {bt_hci_cmd_write_default_link_policy, NULL},
+#ifdef CONFIG_BLUERETRO_BT_SSP_DBG
+    {bt_hci_cmd_write_ssp_dbg_mode, NULL},
+#endif
     {bt_hci_cmd_le_read_buffer_size, NULL},
     {bt_hci_cmd_le_set_adv_param, NULL},
     {bt_hci_cmd_le_set_adv_data, NULL},
@@ -415,6 +422,19 @@ static void bt_hci_cmd_user_confirm_reply(void *bdaddr) {
     bt_hci_cmd(BT_HCI_OP_USER_CONFIRM_REPLY, sizeof(*user_confirm_reply));
 }
 
+static void bt_hci_cmd_sniff_mode(void *handle, uint16_t interval) {
+    struct bt_hci_cp_sniff_mode *sniff_mode = (struct bt_hci_cp_sniff_mode *)&bt_hci_pkt_tmp.cp;
+    printf("# %s\n", __FUNCTION__);
+
+    sniff_mode->handle = *(uint16_t *)handle;
+    sniff_mode->max_interval = interval;
+    sniff_mode->min_interval = interval;
+    sniff_mode->attempt = 1;
+    sniff_mode->timeout = 1;
+
+    bt_hci_cmd(BT_HCI_OP_SNIFF_MODE, sizeof(*sniff_mode));
+}
+
 static void bt_hci_cmd_exit_sniff_mode(void *handle) {
     struct bt_hci_cp_exit_sniff_mode *exit_sniff_mode = (struct bt_hci_cp_exit_sniff_mode *)&bt_hci_pkt_tmp.cp;
     printf("# %s\n", __FUNCTION__);
@@ -633,6 +653,16 @@ static void bt_hci_cmd_write_hold_mode_act(void *cp) {
     bt_hci_cmd(BT_HCI_OP_WRITE_HOLD_MODE_ACT, sizeof(*write_hold_mode_act));
 }
 
+static void bt_hci_cmd_write_link_supervision_to(void *handle) {
+    struct bt_hci_cp_write_link_supervision_to *cp = (struct bt_hci_cp_write_link_supervision_to *)&bt_hci_pkt_tmp.cp;
+    printf("# %s\n", __FUNCTION__);
+
+    cp->handle = *(uint16_t *)handle;
+    cp->timeout = 3200;
+
+    bt_hci_cmd(BT_HCI_OP_WRITE_LINK_SUPERVISION_TO, sizeof(*cp));
+}
+
 static void bt_hci_cmd_read_num_supported_iac(void *cp) {
     printf("# %s\n", __FUNCTION__);
 
@@ -750,6 +780,17 @@ static void bt_hci_cmd_read_local_sp_options(void *cp) {
     printf("# %s\n", __FUNCTION__);
 
     bt_hci_cmd(BT_HCI_OP_READ_LOCAL_SP_OPTIONS, 0);
+}
+#endif
+
+#ifdef CONFIG_BLUERETRO_BT_SSP_DBG
+static void bt_hci_cmd_write_ssp_dbg_mode(void *cp) {
+    struct bt_hci_cp_write_ssp_dbg_mode *write_ssp_dbg_mode = (struct bt_hci_cp_write_ssp_dbg_mode *)&bt_hci_pkt_tmp.cp;
+    printf("# %s\n", __FUNCTION__);
+
+    write_ssp_dbg_mode->mode = 0x01;
+
+    bt_hci_cmd(BT_HCI_OP_WRITE_SSP_DBG_MODE, sizeof(*write_ssp_dbg_mode));
 }
 #endif
 
@@ -1242,8 +1283,16 @@ void bt_hci_disconnect(struct bt_dev *device) {
     }
 }
 
+void bt_hci_sniff_mode(struct bt_dev *device, uint16_t interval) {
+    bt_hci_cmd_sniff_mode((void *)&device->acl_handle, interval);
+}
+
 void bt_hci_exit_sniff_mode(struct bt_dev *device) {
     bt_hci_cmd_exit_sniff_mode((void *)&device->acl_handle);
+}
+
+void bt_hci_write_link_supervision_timeout(struct bt_dev *device) {
+    bt_hci_cmd_write_link_supervision_to((void *)&device->acl_handle);
 }
 
 void bt_hci_get_le_local_addr(bt_addr_le_t *le_local) {
@@ -1603,6 +1652,13 @@ void bt_hci_evt_hdlr(struct bt_hci_pkt *bt_hci_evt_pkt) {
                             bt_hci_q_conf(0);
                         }
                         break;
+                    /* Sniff mode is best efforts no retry */
+                    case BT_HCI_OP_SNIFF_MODE:
+                        device->sniff_state = BT_SNIFF_DISABLE;
+                        break;
+                    case BT_HCI_OP_EXIT_SNIFF_MODE:
+                        device->sniff_state = BT_SNIFF_SET;
+                        break;
                 }
             }
             else {
@@ -1738,6 +1794,27 @@ void bt_hci_evt_hdlr(struct bt_hci_pkt *bt_hci_evt_pkt) {
             else {
                 printf("# dev NULL!\n");
             }
+            break;
+        }
+        case BT_HCI_EVT_MODE_CHANGE:
+        {
+            struct bt_hci_evt_mode_change *evt = (struct bt_hci_evt_mode_change *)bt_hci_evt_pkt->evt_data;
+            bt_host_get_dev_from_handle(evt->handle, &device);
+            printf("# BT_HCI_EVT_MODE_CHANGE dev: %ld status: %d mode: %d interval %d\n", device->ids.id, evt->status, evt->mode, evt->interval);
+#if 0
+            if (evt->status == BT_HCI_ERR_SUCCESS) {
+                if (evt->mode == BT_MODE_ACTIVE) {
+                    device->sniff_interval = 0;
+                    device->sniff_state = BT_SNIFF_DISABLE;
+                    bt_host_update_sniff_interval();
+                }
+                else {
+                    device->sniff_interval = evt->interval;
+                    device->sniff_state = BT_SNIFF_SET;
+                    bt_host_update_sniff_interval();
+                }
+            }
+#endif
             break;
         }
         case BT_HCI_EVT_PIN_CODE_REQ:

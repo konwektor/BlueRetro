@@ -358,6 +358,9 @@ struct bt_hci_cmd_hdr {
 #define BT_OGF_BASEBAND                         0x03
 #define BT_OGF_INFO                             0x04
 #define BT_OGF_STATUS                           0x05
+#ifdef BLUERETRO
+#define BT_OGF_TEST                             0x06
+#endif /* BLUERETRO */
 #define BT_OGF_LE                               0x08
 #define BT_OGF_VS                               0x3f
 
@@ -580,6 +583,15 @@ struct bt_hci_cp_io_capability_neg_reply {
 } __packed;
 
 #ifdef BLUERETRO
+#define BT_HCI_OP_SNIFF_MODE                    BT_OP(BT_OGF_LINK_POLICY, 0x0003)
+struct bt_hci_cp_sniff_mode {
+	u16_t handle;
+	u16_t max_interval;
+	u16_t min_interval;
+	u16_t attempt;
+	u16_t timeout;
+} __packed;
+
 #define BT_HCI_OP_EXIT_SNIFF_MODE               BT_OP(BT_OGF_LINK_POLICY, 0x0004)
 struct bt_hci_cp_exit_sniff_mode {
 	u16_t handle;
@@ -797,6 +809,12 @@ struct bt_hci_cp_host_num_completed_packets {
 } __packed;
 
 #ifdef BLUERETRO
+#define BT_HCI_OP_WRITE_LINK_SUPERVISION_TO     BT_OP(BT_OGF_BASEBAND, 0x0037)
+struct bt_hci_cp_write_link_supervision_to {
+	u16_t handle;
+	u16_t timeout;
+} __packed;
+
 #define BT_HCI_OP_READ_NUM_SUPPORTED_IAC        BT_OP(BT_OGF_BASEBAND, 0x0038)
 #define BT_HCI_OP_READ_CURRENT_IAC_LAP          BT_OP(BT_OGF_BASEBAND, 0x0039)
 #endif
@@ -948,6 +966,13 @@ struct bt_hci_rp_read_encryption_key_size {
 	u16_t handle;
 	u8_t  key_size;
 } __packed;
+
+#ifdef BLUERETRO
+#define BT_HCI_OP_WRITE_SSP_DBG_MODE            BT_OP(BT_OGF_TEST, 0x0004)
+struct bt_hci_cp_write_ssp_dbg_mode {
+	u8_t mode;
+} __packed;
+#endif
 
 /* BLE */
 
@@ -1701,6 +1726,22 @@ struct bt_hci_evt_num_completed_packets {
 	u8_t  num_handles;
 	struct bt_hci_handle_count h[0];
 } __packed;
+
+#ifdef BLUERETRO
+
+/* BT Modes */
+#define BT_MODE_ACTIVE                          0x00
+#define BT_MODE_HOLD                            0x01
+#define BT_MODE_SNIFF                           0x02
+
+#define BT_HCI_EVT_MODE_CHANGE                  0x14
+struct bt_hci_evt_mode_change {
+	u8_t status;
+	u16_t handle;
+	u8_t mode;
+	u16_t interval;
+} __packed;
+#endif /* BLUERETRO */
 
 #define BT_HCI_EVT_PIN_CODE_REQ                 0x16
 struct bt_hci_evt_pin_code_req {

@@ -1,11 +1,12 @@
 /*
- * Copyright (c) 2021-2022, Jacques Gagnon
+ * Copyright (c) 2021-2023, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <string.h>
 #include "adapter/config.h"
 #include "adapter/wired/wired.h"
+#include "system/manager.h"
 #include "zephyr/types.h"
 #include "tools/util.h"
 #include "pce.h"
@@ -57,12 +58,12 @@ static DRAM_ATTR const uint8_t pce_mouse_axes_idx[ADAPTER_MAX_AXES] =
 
 static DRAM_ATTR const struct ctrl_meta pce_mouse_axes_meta[ADAPTER_MAX_AXES] =
 {
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128, .polarity = 1},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128, .polarity = 1},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 128},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128, .polarity = 1},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128, .polarity = 1},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 127, .abs_min = 128},
 };
 
 struct pce_map {
@@ -75,7 +76,7 @@ struct pce_mouse_map {
     uint8_t relative[2];
 } __packed;
 
-static const uint32_t pce_mouse_mask[4] = {0x190100F0, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t pce_mouse_mask[4] = {0x190100F0, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t pce_mouse_desc[4] = {0x000000F0, 0x00000000, 0x00000000, 0x00000000};
 static const uint32_t pce_mouse_btns_mask[32] = {
     0, 0, 0, 0,
@@ -88,7 +89,7 @@ static const uint32_t pce_mouse_btns_mask[32] = {
     P1_R_II_MASK, 0, 0, 0,
 };
 
-static const uint32_t pce_mask[4] = {0x00350F00, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t pce_mask[4] = {0x00750F00, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t pce_desc[4] = {0x00000000, 0x00000000, 0x00000000, 0x00000000};
 static DRAM_ATTR const uint32_t pce_btns_mask[][32] = {
     /* URDL */
@@ -126,7 +127,7 @@ static DRAM_ATTR const uint32_t pce_btns_mask[][32] = {
     },
 };
 
-static const uint32_t pce_6btns_mask[4] = {0x333F0F00, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t pce_6btns_mask[4] = {0x337F0F00, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t pce_6btns_desc[4] = {0x00000000, 0x00000000, 0x00000000, 0x00000000};
 static DRAM_ATTR const uint32_t pce_6btns_btns_mask[][32] = {
     /* URDL */
@@ -164,7 +165,27 @@ static DRAM_ATTR const uint32_t pce_6btns_btns_mask[][32] = {
     },
 };
 
-static void pce_mouse_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+static void pce_ctrl_special_action(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
+    /* Output config mode toggle GamePad/GamePadAlt */
+    if (ctrl_data->map_mask[0] & generic_btns_mask[PAD_MT]) {
+        if (ctrl_data->btns[0].value & generic_btns_mask[PAD_MT]) {
+            if (!atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE)) {
+                atomic_set_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
+            }
+        }
+        else {
+            if (atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE)) {
+                atomic_clear_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
+
+                config.out_cfg[ctrl_data->index].dev_mode &= 0x01;
+                config.out_cfg[ctrl_data->index].dev_mode ^= 0x01;
+                sys_mgr_cmd(SYS_MGR_CMD_WIRED_RST);
+            }
+        }
+    }
+}
+
+static void pce_mouse_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct pce_mouse_map map_tmp;
     int32_t *raw_axes = (int32_t *)(wired_data->output);
 
@@ -197,7 +218,7 @@ static void pce_mouse_from_generic(struct generic_ctrl *ctrl_data, struct wired_
     memcpy(wired_data->output + 8, (uint8_t *)&map_tmp + 8, sizeof(map_tmp) - 8);
 }
 
-static void pce_ctrl_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+static void pce_ctrl_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct pce_map map_tmp;
     uint32_t map_mask[3];
     const uint32_t (*btns_mask)[32] = (config.out_cfg[0].dev_mode == DEV_PAD_ALT) ? pce_6btns_btns_mask : pce_btns_mask;
@@ -225,7 +246,14 @@ static void pce_ctrl_from_generic(struct generic_ctrl *ctrl_data, struct wired_d
         }
     }
 
+    pce_ctrl_special_action(ctrl_data, wired_data);
+
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp));
+
+#ifdef CONFIG_BLUERETRO_RAW_OUTPUT
+    printf("{\"log_type\": \"wired_output\", \"btns\": [%ld, %ld, %ld, %ld, %ld]}\n",
+        map_tmp.buttons[0], map_tmp.buttons[1], map_tmp.buttons[2], map_tmp.buttons[3], map_tmp.buttons[4]);
+#endif
 }
 
 void IRAM_ATTR pce_init_buffer(int32_t dev_mode, struct wired_data *wired_data) {
@@ -255,7 +283,7 @@ void IRAM_ATTR pce_init_buffer(int32_t dev_mode, struct wired_data *wired_data) 
     }
 }
 
-void pce_meta_init(struct generic_ctrl *ctrl_data) {
+void pce_meta_init(struct wired_ctrl *ctrl_data) {
     memset((void *)ctrl_data, 0, sizeof(*ctrl_data)*WIRED_MAX_DEV);
 
     for (uint32_t i = 0; i < WIRED_MAX_DEV; i++) {
@@ -278,7 +306,7 @@ void pce_meta_init(struct generic_ctrl *ctrl_data) {
     }
 }
 
-void pce_from_generic(int32_t dev_mode, struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+void pce_from_generic(int32_t dev_mode, struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     switch (dev_mode) {
         case DEV_MOUSE:
             pce_mouse_from_generic(ctrl_data, wired_data);

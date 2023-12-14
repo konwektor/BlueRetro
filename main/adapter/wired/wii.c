@@ -30,12 +30,12 @@ enum {
 
 static DRAM_ATTR const struct ctrl_meta wiic_axes_meta[ADAPTER_MAX_AXES] =
 {
-    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x66},
-    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x66},
-    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x66},
-    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x66},
-    {.size_min = 0, .size_max = 255, .neutral = 0x16, .abs_max = 0xDA},
-    {.size_min = 0, .size_max = 255, .neutral = 0x16, .abs_max = 0xDA},
+    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x66, .abs_min = 0x66},
+    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x66, .abs_min = 0x66},
+    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x66, .abs_min = 0x66},
+    {.size_min = -128, .size_max = 127, .neutral = 0x80, .abs_max = 0x66, .abs_min = 0x66},
+    {.size_min = 0, .size_max = 255, .neutral = 0x16, .abs_max = 0xDA, .abs_min = 0x00},
+    {.size_min = 0, .size_max = 255, .neutral = 0x16, .abs_max = 0xDA, .abs_min = 0x00},
 };
 
 struct wiic_map {
@@ -49,7 +49,7 @@ static DRAM_ATTR const uint8_t wiic_axes_idx[ADAPTER_MAX_AXES] =
     0,       2,       1,       3,       4,      5
 };
 
-static const uint32_t wiic_mask[4] = {0xFFFFFFFF, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t wiic_mask[4] = {0xFFFFFFFF, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t wiic_pro_desc[4] = {0x000000FF, 0x00000000, 0x00000000, 0x00000000};
 static const uint32_t wiic_desc[4] = {0x110000FF, 0x00000000, 0x00000000, 0x00000000};
 static DRAM_ATTR const uint32_t wiic_btns_mask[32] = {
@@ -80,7 +80,7 @@ void IRAM_ATTR wii_init_buffer(int32_t dev_mode, struct wired_data *wired_data) 
     }
 }
 
-void wii_meta_init(struct generic_ctrl *ctrl_data) {
+void wii_meta_init(struct wired_ctrl *ctrl_data) {
     memset((void *)ctrl_data, 0, sizeof(*ctrl_data)*4);
 
     for (uint32_t i = 0; i < WIRED_MAX_DEV; i++) {
@@ -101,7 +101,7 @@ void wii_meta_init(struct generic_ctrl *ctrl_data) {
     }
 }
 
-void wii_from_generic(int32_t dev_mode, struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+void wii_from_generic(int32_t dev_mode, struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct wiic_map map_tmp;
     uint32_t map_mask = 0xFFFF;
 
@@ -153,6 +153,12 @@ void wii_from_generic(int32_t dev_mode, struct generic_ctrl *ctrl_data, struct w
     }
 
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp));
+
+#ifdef CONFIG_BLUERETRO_RAW_OUTPUT
+    printf("{\"log_type\": \"wired_output\", \"axes\": [%d, %d, %d, %d, %d, %d], \"btns\": %d}\n",
+        map_tmp.axes[wiic_axes_idx[0]], map_tmp.axes[wiic_axes_idx[1]], map_tmp.axes[wiic_axes_idx[2]],
+        map_tmp.axes[wiic_axes_idx[3]], map_tmp.axes[wiic_axes_idx[4]], map_tmp.axes[wiic_axes_idx[5]], map_tmp.buttons);
+#endif
 }
 
 void IRAM_ATTR wii_gen_turbo_mask(struct wired_data *wired_data) {

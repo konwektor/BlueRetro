@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022, Jacques Gagnon
+ * Copyright (c) 2019-2023, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -38,14 +38,14 @@ static DRAM_ATTR const uint8_t n64_axes_idx[ADAPTER_MAX_AXES] =
 
 static DRAM_ATTR const struct ctrl_meta n64_axes_meta[N64_AXES_MAX] =
 {
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 0x54},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 0x54},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 0x54, .abs_min = 0x54},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 0x54, .abs_min = 0x54},
 };
 
 static DRAM_ATTR const struct ctrl_meta n64_mouse_axes_meta[N64_AXES_MAX] =
 {
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 0x80},
-    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 0x80},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 0x7F, .abs_min = 0x80},
+    {.size_min = -128, .size_max = 127, .neutral = 0x00, .abs_max = 0x7F, .abs_min = 0x80},
 };
 
 struct n64_map {
@@ -64,20 +64,20 @@ struct n64_kb_map {
     uint8_t bitfield;
 } __packed;
 
-static const uint32_t n64_mask[4] = {0x33DF0FFF, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t n64_mask[4] = {0x33DFAFFF, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t n64_desc[4] = {0x0000000F, 0x00000000, 0x00000000, 0x00000000};
 static DRAM_ATTR const uint32_t n64_btns_mask[32] = {
     0, 0, 0, 0,
     BIT(N64_C_LEFT), BIT(N64_C_RIGHT), BIT(N64_C_DOWN), BIT(N64_C_UP),
     BIT(N64_LD_LEFT), BIT(N64_LD_RIGHT), BIT(N64_LD_DOWN), BIT(N64_LD_UP),
-    0, 0, 0, 0,
+    0, BIT(N64_C_RIGHT), 0, BIT(N64_C_UP),
     BIT(N64_B), BIT(N64_C_DOWN), BIT(N64_A), BIT(N64_C_LEFT),
     BIT(N64_START), 0, 0, 0,
     BIT(N64_Z), BIT(N64_L), 0, 0,
     BIT(N64_Z), BIT(N64_R), 0, 0,
 };
 
-static const uint32_t n64_mouse_mask[4] = {0x110000F0, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t n64_mouse_mask[4] = {0x110000F0, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t n64_mouse_desc[4] = {0x000000F0, 0x00000000, 0x00000000, 0x00000000};
 static const uint32_t n64_mouse_btns_mask[32] = {
     0, 0, 0, 0,
@@ -90,7 +90,7 @@ static const uint32_t n64_mouse_btns_mask[32] = {
     BIT(N64_A), 0, 0, 0,
 };
 
-static const uint32_t n64_kb_mask[4] = {0xE6FF0F0F, 0xFFFFFFFF, 0x2D7FFFFF, 0x0007C000};
+static const uint32_t n64_kb_mask[4] = {0xE6FF0F0F, 0xFFFFFFFF, 0x2D7FFFFF, 0x0007C000 | BR_COMBO_MASK};
 static const uint32_t n64_kb_desc[4] = {0x00000000, 0x00000000, 0x00000000, 0x00000000};
 static const uint16_t n64_kb_scancode[KBM_MAX] = {
  /* KB_A, KB_D, KB_S, KB_W, MOUSE_X_LEFT, MOUSE_X_RIGHT, MOUSE_Y_DOWN MOUSE_Y_UP */
@@ -160,7 +160,7 @@ void IRAM_ATTR n64_init_buffer(int32_t dev_mode, struct wired_data *wired_data) 
     }
 }
 
-void n64_meta_init(struct generic_ctrl *ctrl_data) {
+void n64_meta_init(struct wired_ctrl *ctrl_data) {
     memset((void *)ctrl_data, 0, sizeof(*ctrl_data)*4);
 
     for (uint32_t i = 0; i < WIRED_MAX_DEV; i++) {
@@ -206,10 +206,9 @@ static void n64_acc_toggle_fb(uint32_t wired_id, uint32_t duration_us) {
             bt_hid_feedback(device, bt_data->base.output);
         }
     }
-
 }
 
-static void n64_ctrl_special_action(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+static void n64_ctrl_special_action(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     /* Memory / Rumble toggle */
     if (ctrl_data->map_mask[0] & generic_btns_mask[PAD_MT]) {
         if (ctrl_data->btns[0].value & generic_btns_mask[PAD_MT]) {
@@ -254,7 +253,7 @@ static void n64_ctrl_special_action(struct generic_ctrl *ctrl_data, struct wired
     }
 }
 
-static void n64_ctrl_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+static void n64_ctrl_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct n64_map map_tmp;
     uint32_t map_mask = 0xFFFF;
 
@@ -292,9 +291,14 @@ static void n64_ctrl_from_generic(struct generic_ctrl *ctrl_data, struct wired_d
     }
 
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp));
+
+#ifdef CONFIG_BLUERETRO_RAW_OUTPUT
+    printf("{\"log_type\": \"wired_output\", \"axes\": [%d, %d], \"btns\": %d}\n",
+        map_tmp.axes[n64_axes_idx[0]], map_tmp.axes[n64_axes_idx[1]], map_tmp.buttons);
+#endif
 }
 
-static void n64_mouse_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+static void n64_mouse_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct n64_mouse_map map_tmp;
     int32_t *raw_axes = (int32_t *)(wired_data->output + 4);
 
@@ -327,7 +331,7 @@ static void n64_mouse_from_generic(struct generic_ctrl *ctrl_data, struct wired_
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp) - 8);
 }
 
-static void n64_kb_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+static void n64_kb_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct n64_kb_map map_tmp = {0};
     uint32_t code_idx = 0;
 
@@ -354,7 +358,7 @@ static void n64_kb_from_generic(struct generic_ctrl *ctrl_data, struct wired_dat
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp));
 }
 
-void n64_from_generic(int32_t dev_mode, struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+void n64_from_generic(int32_t dev_mode, struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     switch (dev_mode) {
         case DEV_KB:
             n64_kb_from_generic(ctrl_data, wired_data);

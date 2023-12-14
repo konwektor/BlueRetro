@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022, Jacques Gagnon
+ * Copyright (c) 2019-2023, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -8,6 +8,7 @@
 #include "tools/util.h"
 #include "adapter/config.h"
 #include "adapter/wired/wired.h"
+#include "system/manager.h"
 #include "real.h"
 
 enum {
@@ -50,22 +51,22 @@ static DRAM_ATTR const uint8_t real_mouse_axes_idx[ADAPTER_MAX_AXES] =
 
 static DRAM_ATTR const struct ctrl_meta real_fs_axes_meta[ADAPTER_MAX_AXES] =
 {
-    {.size_min = -512, .size_max = 511, .neutral = 512, .abs_max = 512},
-    {.size_min = -512, .size_max = 511, .neutral = 512, .abs_max = 512, .polarity = 1},
-    {.size_min = -512, .size_max = 511, .neutral = 512, .abs_max = 512}, //NA
-    {.size_min = -512, .size_max = 511, .neutral = 512, .abs_max = 512, .polarity = 1},
-    {.size_min = 0, .size_max = 255, .neutral = 0x00, .abs_max = 0xFF}, //NA
-    {.size_min = 0, .size_max = 255, .neutral = 0x00, .abs_max = 0xFF}, //NA
+    {.size_min = -512, .size_max = 511, .neutral = 512, .abs_max = 511, .abs_min = 512},
+    {.size_min = -512, .size_max = 511, .neutral = 512, .abs_max = 511, .abs_min = 512, .polarity = 1},
+    {.size_min = -512, .size_max = 511, .neutral = 512, .abs_max = 511, .abs_min = 512}, //NA
+    {.size_min = -512, .size_max = 511, .neutral = 512, .abs_max = 511, .abs_min = 512, .polarity = 1},
+    {.size_min = 0, .size_max = 255, .neutral = 0x00, .abs_max = 0xFF, .abs_min = 0}, //NA
+    {.size_min = 0, .size_max = 255, .neutral = 0x00, .abs_max = 0xFF, .abs_min = 0}, //NA
 };
 
 static DRAM_ATTR const struct ctrl_meta real_mouse_axes_meta[ADAPTER_MAX_AXES] =
 {
-    {.size_min = -512, .size_max = 511, .neutral = 0x00, .abs_max = 512},
-    {.size_min = -512, .size_max = 511, .neutral = 0x00, .abs_max = 512, .polarity = 1},
-    {.size_min = -512, .size_max = 511, .neutral = 0x00, .abs_max = 512},
-    {.size_min = -512, .size_max = 511, .neutral = 0x00, .abs_max = 512, .polarity = 1},
-    {.size_min = -512, .size_max = 511, .neutral = 0x00, .abs_max = 512},
-    {.size_min = -512, .size_max = 511, .neutral = 0x00, .abs_max = 512},
+    {.size_min = -512, .size_max = 511, .neutral = 0x00, .abs_max = 511, .abs_min = 512},
+    {.size_min = -512, .size_max = 511, .neutral = 0x00, .abs_max = 511, .abs_min = 512, .polarity = 1},
+    {.size_min = -512, .size_max = 511, .neutral = 0x00, .abs_max = 511, .abs_min = 512},
+    {.size_min = -512, .size_max = 511, .neutral = 0x00, .abs_max = 511, .abs_min = 512, .polarity = 1},
+    {.size_min = -512, .size_max = 511, .neutral = 0x00, .abs_max = 511, .abs_min = 512},
+    {.size_min = -512, .size_max = 511, .neutral = 0x00, .abs_max = 511, .abs_min = 512},
 };
 
 struct real_map {
@@ -85,7 +86,7 @@ struct real_mouse_map {
     int32_t raw_axes[2];
 } __packed;
 
-static const uint32_t real_mask[4] = {0x33370F00, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t real_mask[4] = {0x33770F00, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t real_desc[4] = {0x00000000, 0x00000000, 0x00000000, 0x00000000};
 static DRAM_ATTR const uint32_t real_btns_mask[32] = {
     0, 0, 0, 0,
@@ -98,7 +99,7 @@ static DRAM_ATTR const uint32_t real_btns_mask[32] = {
     BIT(REAL_R), BIT(REAL_R), 0, 0,
 };
 
-static const uint32_t real_fs_mask[4] = {0x333F0FCF, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t real_fs_mask[4] = {0x337F0FCF, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t real_fs_desc[4] = {0x000000CF, 0x00000000, 0x00000000, 0x00000000};
 static DRAM_ATTR const uint32_t real_fs_btns_mask[32] = {
     0, 0, 0, 0,
@@ -111,7 +112,7 @@ static DRAM_ATTR const uint32_t real_fs_btns_mask[32] = {
     BIT(REAL_FS_R), BIT(REAL_FS_R), 0, 0,
 };
 
-static const uint32_t real_mouse_mask[4] = {0x190000F0, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t real_mouse_mask[4] = {0x190000F0, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t real_mouse_desc[4] = {0x000000F0, 0x00000000, 0x00000000, 0x00000000};
 static const uint32_t real_mouse_btns_mask[32] = {
     0, 0, 0, 0,
@@ -123,6 +124,26 @@ static const uint32_t real_mouse_btns_mask[32] = {
     BIT(REAL_M_RIGHT), 0, 0, BIT(REAL_M_MIDDLE),
     BIT(REAL_M_LEFT), 0, 0, 0,
 };
+
+static void real_ctrl_special_action(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
+    /* Output config mode toggle GamePad/GamePadAlt */
+    if (ctrl_data->map_mask[0] & generic_btns_mask[PAD_MT]) {
+        if (ctrl_data->btns[0].value & generic_btns_mask[PAD_MT]) {
+            if (!atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE)) {
+                atomic_set_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
+            }
+        }
+        else {
+            if (atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE)) {
+                atomic_clear_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
+
+                config.out_cfg[ctrl_data->index].dev_mode &= 0x01;
+                config.out_cfg[ctrl_data->index].dev_mode ^= 0x01;
+                sys_mgr_cmd(SYS_MGR_CMD_WIRED_RST);
+            }
+        }
+    }
+}
 
 void IRAM_ATTR real_init_buffer(int32_t dev_mode, struct wired_data *wired_data) {
     switch (dev_mode) {
@@ -164,7 +185,7 @@ void IRAM_ATTR real_init_buffer(int32_t dev_mode, struct wired_data *wired_data)
     }
 }
 
-void real_meta_init(struct generic_ctrl *ctrl_data) {
+void real_meta_init(struct wired_ctrl *ctrl_data) {
     memset((void *)ctrl_data, 0, sizeof(*ctrl_data)*WIRED_MAX_DEV);
 
     for (uint32_t i = 0; i < WIRED_MAX_DEV; i++) {
@@ -189,7 +210,7 @@ void real_meta_init(struct generic_ctrl *ctrl_data) {
     }
 }
 
-void real_ctrl_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+void real_ctrl_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct real_map map_tmp;
     uint32_t map_mask = 0xFFFF;
 
@@ -209,12 +230,18 @@ void real_ctrl_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *w
         }
     }
 
+    real_ctrl_special_action(ctrl_data, wired_data);
+
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp));
+
+#ifdef CONFIG_BLUERETRO_RAW_OUTPUT
+    printf("{\"log_type\": \"wired_output\", \"btns\": %d}\n", map_tmp.buttons);
+#endif
 }
 
 /* I didn't RE this one my self, base on : */
 /* https://github.com/libretro/opera-libretro/blob/068c69ff784f2abaea69cdf1b8d3d9d39ac4826e/libopera/opera_pbus.c#L89 */
-void real_fs_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+void real_fs_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct real_fs_map map_tmp;
     uint32_t map_mask = 0xFFFF;
 
@@ -233,6 +260,8 @@ void real_fs_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wir
             }
         }
     }
+
+    real_ctrl_special_action(ctrl_data, wired_data);
 
     for (uint32_t i = 0; i < 4; i++) {
         if (ctrl_data->map_mask[0] & (axis_to_btn_mask(i) & real_fs_desc[0])) {
@@ -271,9 +300,15 @@ void real_fs_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wir
     }
 
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp));
+
+#ifdef CONFIG_BLUERETRO_RAW_OUTPUT
+    printf("{\"log_type\": \"wired_output\", \"axes\": [%d, %d, %d, %d], \"btns\": %d}\n",
+        map_tmp.axes[0], map_tmp.axes[1], map_tmp.axes[2], map_tmp.axes[3],
+        map_tmp.buttons);
+#endif
 }
 
-static void real_mouse_from_generic(struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+static void real_mouse_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     struct real_mouse_map map_tmp;
     int32_t *raw_axes = (int32_t *)(wired_data->output + 4);
 
@@ -306,7 +341,7 @@ static void real_mouse_from_generic(struct generic_ctrl *ctrl_data, struct wired
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp) - 8);
 }
 
-void real_from_generic(int32_t dev_mode, struct generic_ctrl *ctrl_data, struct wired_data *wired_data) {
+void real_from_generic(int32_t dev_mode, struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
     switch (dev_mode) {
         case DEV_MOUSE:
             real_mouse_from_generic(ctrl_data, wired_data);
