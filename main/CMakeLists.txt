@@ -81,7 +81,7 @@ idf_component_register(SRCS "main.c"
                             "wired/jag_io.c"
                             "wired/sea_io.c"
                             "wired/wii_i2c.c"
-							"wired/ogx360_i2c.c"
+                            "wired/ogx360_i2c.c"
                             "zephyr/atomic.S"
                     PRIV_INCLUDE_DIRS "."
                     LDFRAGMENTS linker.lf)
