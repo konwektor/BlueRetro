@@ -7,7 +7,7 @@ This is a modified version of BlueRetro with support for sending commands to an 
 Small detailed info in [!compiled](https://github.com/konwektor/BlueRetro/tree/master/!compiled).
 <br>
 This can be compiled the same as BlueRetro. <br>
-Copy /configs/hw1/ogx360S to Your /Blueretro/sdkconfig start esp-idf (v5.1) and rund "esp.py build".
+Copy /configs/hw1/ogx360 to Your /Blueretro/sdkconfig start esp-idf (v5.1.2) and rund "esp.py build".
 
 Or just go to [Releases](https://github.com/konwektor/BlueRetro/releases), and download already compiled files.
 <BR>
@@ -20,19 +20,15 @@ Or just go to [Releases](https://github.com/konwektor/BlueRetro/releases), and d
 
 - All Xbox one x/s series x/s controllers working with rumble, no delay no stuck.
   
-- PS4, WiiU pro controllers tested and working with rumble (driver/i2c.h bug in esp-idf causing from time to time gamepad not responding for 1 sec - i2c timeout- to fix).
+- PS4, WiiU pro controllers tested and working with rumble (Based on Blueretro v1.9 i did not notice anymore timeouts ).
   
 - All other bluetooth gamepads supported by Blueretro should work - not tested - got any???? Give me feedback.
+- PS5 controller with rumble (not tested).
 
 <BR>
 
-- PS5 controller with rumble - soon - look to [Davidxgames](https://github.com/davidxgames) or [XGAMES VIDEOJUEGOS](https://www.youtube.com/@XGAMESVIDEOJUEGOS), there will be 
-      first show up.
-
-
-
-    Respect and many BIG Thanks goes to Ervin: [Eolvera85](https://github.com/eolvera85):- author of PS5 support patch.
-
+ 
+    
 
 # BlueRetro
 
