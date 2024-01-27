@@ -590,9 +590,9 @@ void sys_mgr_init(void) {
             atomic_set_bit(&sys_mgr_flags, SYS_MGR_SENSE_OUT);
             break;
         case N64:
-        case OGX360:
             port_cnt = 4;
             break;
+		case OGX360:
         case DC:
         case GC:
             port_cnt = 4;
