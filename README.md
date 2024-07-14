@@ -19,11 +19,25 @@ Or just go to [Releases](https://github.com/konwektor/BlueRetro/releases), and d
 
 
 - All Xbox one x/s series x/s controllers working with rumble, no delay no stuck.
+
+- All other bluetooth gamepads supported by Blueretro should work - not tested - got any???? Give me feedback.
+
+<BR>
+
+- PS5 controller with rumble - branch "ervin"
+<BR>
+ 
+ - look to [Davidxgames](https://github.com/davidxgames) or [XGAMES VIDEOJUEGOS](https://www.youtube.com/@XGAMESVIDEOJUEGOS),  - video how to do mod, assembly instruction and re compiled files ready to go.   
+   (channel in spanish).
+
+    Respect and many BIG Thanks goes to Ervin: [Eolvera85](https://github.com/eolvera85):- author of PS5 support patch.
+
   
-- PS4, WiiU pro controllers tested and working with rumble (Based on Blueretro v1.9 i did not notice anymore timeouts ).
+- PS4, WiiU pro controllers tested and working -timeout issue with rumble enabled - not responding for 1 sec - to fix. (Source based on Blueretro v1.9 and if compiled as internal - less timeouts but still     
+  there).
   
 - All other bluetooth gamepads supported by Blueretro should work - not tested - got any???? Give me feedback.
-- PS5 controller with rumble (not tested).
+
 
 <BR>
 
