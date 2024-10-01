@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2023, Jacques Gagnon
+ * Copyright (c) 2019-2024, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -106,8 +106,9 @@ static uint8_t rumble_state[4] = {0};
 static uint8_t ctrl_acc_mode[4] = {0};
 static uint8_t ctrl_acc_update[4] = {0};
 static uint8_t ctrl_mem_banksel = 0;
-static uint32_t gc_l_trig_prev_state = 0;
-static uint32_t gc_r_trig_prev_state = 0;
+static uint8_t ctrl_init = 0;
+static uint32_t gc_l_trig_prev_state[4] = {0};
+static uint32_t gc_r_trig_prev_state[4] = {0};
 
 static inline void load_mouse_axes(uint8_t port, uint8_t *axes) {
     uint8_t *relative = (uint8_t *)(wired_adapter.data[port].output + 2);
@@ -453,10 +454,10 @@ static void gc_pad_cmd_hdlr(uint8_t channel, uint8_t port, uint16_t item) {
             }
 
             /* Delay Digital trigger state until analog part is set at least 2 frames */
-            if (gc_r_trig_prev_state < 2) {
+            if (gc_r_trig_prev_state[port] < 2) {
                 buf[5] &= ~0x20;
             }
-            if (gc_l_trig_prev_state < 2) {
+            if (gc_l_trig_prev_state[port] < 2) {
                 buf[5] &= ~0x40;
             }
 
@@ -503,20 +504,20 @@ static void gc_pad_cmd_hdlr(uint8_t channel, uint8_t port, uint16_t item) {
             RMT.conf_ch[channel].conf1.tx_start = 1;
 
             if (buf[10] > 0x30) {
-                if (gc_l_trig_prev_state < 2) {
-                    gc_l_trig_prev_state++;
+                if (gc_l_trig_prev_state[port] < 2) {
+                    gc_l_trig_prev_state[port]++;
                 }
             }
             else {
-                gc_l_trig_prev_state = 0;
+                gc_l_trig_prev_state[port] = 0;
             }
             if (buf[11] > 0x30) {
-                if (gc_r_trig_prev_state < 2) {
-                    gc_r_trig_prev_state++;
+                if (gc_r_trig_prev_state[port] < 2) {
+                    gc_r_trig_prev_state[port]++;
                 }
             }
             else {
-                gc_r_trig_prev_state = 0;
+                gc_r_trig_prev_state[port] = 0;
             }
 
             if (config.out_cfg[port].acc_mode == ACC_RUMBLE) {
@@ -581,7 +582,15 @@ static unsigned n64_isr(unsigned cause) {
                 item = nsi_items_to_bytes(channel * RMT_MEM_ITEM_NUM, buf, 1);
 
                 /* Check if need to flag a pak change */
-                if (config.global_cfg.banksel != ctrl_mem_banksel) {
+                if (ctrl_init == 0) {
+                    ctrl_mem_banksel = config.global_cfg.banksel;
+                    ctrl_acc_mode[0] = config.out_cfg[0].acc_mode;
+                    ctrl_acc_mode[1] = config.out_cfg[1].acc_mode;
+                    ctrl_acc_mode[2] = config.out_cfg[2].acc_mode;
+                    ctrl_acc_mode[3] = config.out_cfg[3].acc_mode;
+                    ctrl_init = 1;
+                }
+                else if (config.global_cfg.banksel != ctrl_mem_banksel) {
                     *(uint32_t *)ctrl_acc_update = 0x20202020;
                     ctrl_mem_banksel = config.global_cfg.banksel;
                 }

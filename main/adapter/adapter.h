@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2023, Jacques Gagnon
+ * Copyright (c) 2019-2024, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -21,7 +21,9 @@
 #define BT_MAX_DEV 7 /* BT limitation */
 #define WIRED_MAX_DEV 12 /* Saturn limit */
 #define ADAPTER_MAX_AXES 6
+#define ADAPTER_PS2_MAX_AXES 16
 #define REPORT_MAX_USAGE 16
+#define HID_MAX_REPORT 10
 #define MAX_PULL_BACK 0.95
 
 /* BT device type ID */
@@ -284,6 +286,16 @@ enum {
     AXIS_RY,
     TRIG_L,
     TRIG_R,
+    TRIG_LS,
+    TRIG_RS,
+    DPAD_LEFT,
+    DPAD_RIGHT,
+    DPAD_DOWN,
+    DPAD_UP,
+    BTN_LEFT,
+    BTN_RIGHT,
+    BTN_DOWN,
+    BTN_UP,
 };
 
 /* BT flags */
@@ -420,7 +432,7 @@ struct wireless_ctrl {
     const uint32_t *mask;
     const uint32_t *desc;
     struct ctrl_btn btns[4];
-    struct ctrl_axis axes[ADAPTER_MAX_AXES];
+    struct ctrl_axis axes[ADAPTER_PS2_MAX_AXES];
 };
 
 struct wired_ctrl {
@@ -429,7 +441,7 @@ struct wired_ctrl {
     const uint32_t *desc;
     uint32_t map_mask[4];
     struct ctrl_btn btns[4];
-    struct ctrl_axis_wired axes[ADAPTER_MAX_AXES];
+    struct ctrl_axis_wired axes[ADAPTER_PS2_MAX_AXES];
 };
 
 struct generic_fb {
@@ -472,6 +484,7 @@ struct hid_report {
     uint32_t len;
     uint32_t tag;
     uint32_t usage_cnt;
+    uint32_t type;
     struct hid_usage usages[REPORT_MAX_USAGE];
 };
 
@@ -479,8 +492,8 @@ struct raw_src_mapping {
     uint32_t mask[4];
     uint32_t desc[4];
     uint32_t btns_mask[32];
-    uint32_t axes_to_btns[ADAPTER_MAX_AXES];
-    struct ctrl_meta meta[ADAPTER_MAX_AXES];
+    uint32_t axes_to_btns[ADAPTER_PS2_MAX_AXES];
+    struct ctrl_meta meta[ADAPTER_PS2_MAX_AXES];
 };
 
 struct bt_ids {
@@ -502,7 +515,7 @@ struct bt_data_base {
     uint32_t input_len;
     uint8_t *sdp_data;
     uint32_t sdp_len;
-    int32_t axes_cal[ADAPTER_MAX_AXES];
+    int32_t axes_cal[ADAPTER_PS2_MAX_AXES];
     uint8_t output[128];
 };
 

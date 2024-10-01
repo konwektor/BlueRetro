@@ -26,7 +26,6 @@ static const struct bt_name_type bt_name_type[] = {
     {"PLAYSTATION(R)3", BT_PS3, BT_SUBTYPE_DEFAULT, 0},
     {"Xbox Wireless Controller", BT_XBOX, BT_XBOX_XINPUT, 0},
     {"Xbox Adaptive Controller", BT_XBOX, BT_XBOX_ADAPTIVE, 0},
-    {"Xbox Wireless Contr", BT_XBOX, BT_XBOX_XS, 0},
     {"DualSense Wireless Controller", BT_PS, BT_PS5_DS, 0},
     {"Wireless Controller", BT_PS, BT_SUBTYPE_DEFAULT, 0},
     {"Nintendo RVL-CNT-01-UC", BT_WII, BT_WIIU_PRO, 0}, /* Must be before WII */
@@ -47,6 +46,7 @@ static const struct bt_name_type bt_name_type[] = {
     {"8BitDo NEOGEO GP", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, BIT(BT_QUIRK_TRIGGER_PRI_SEC_INVERT)},
     {"8BitDo M30 gamepad", BT_XBOX, BT_XBOX_XINPUT, BIT(BT_QUIRK_8BITDO_M30)},
     {"8BitDo S30 Modkit", BT_XBOX, BT_XBOX_XINPUT, BIT(BT_QUIRK_8BITDO_SATURN)},
+    {"8BitDo Retro Keyboard", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, 0}, /* Need to be exluded from 8bitdo catch all */
     {"8Bitdo", BT_XBOX, BT_XBOX_XINPUT, 0}, /* 8bitdo catch all, tested with SF30 Pro */
     {"Retro Bit Bluetooth Controller", BT_XBOX, BT_XBOX_XINPUT, BIT(BT_QUIRK_FACE_BTNS_TRIGGER_TO_6BUTTONS) | BIT(BT_QUIRK_TRIGGER_PRI_SEC_INVERT)},
     {"Joy Controller", BT_XBOX, BT_XBOX_XINPUT, BIT(BT_QUIRK_RF_WARRIOR)},
@@ -86,7 +86,7 @@ static const bt_hid_cmd_t bt_hid_feedback_list[BT_TYPE_MAX] = {
 
 void bt_hid_set_type_flags_from_name(struct bt_dev *device, const char* name) {
     for (uint32_t i = 0; i < sizeof(bt_name_type)/sizeof(*bt_name_type); i++) {
-        if (strstr(name, bt_name_type[i].name) != NULL) {
+        if (strcasestr(name, bt_name_type[i].name) != NULL) {
             struct bt_data *bt_data = &bt_adapter.data[device->ids.id];
 
             bt_type_update(device->ids.id, bt_name_type[i].type, bt_name_type[i].subtype);
@@ -98,8 +98,10 @@ void bt_hid_set_type_flags_from_name(struct bt_dev *device, const char* name) {
 }
 
 void bt_hid_init(struct bt_dev *device) {
-    bt_hci_write_link_supervision_timeout(device);
-    //bt_host_update_sniff_interval();
+    // if (!atomic_test_bit(&device->flags, BT_DEV_IS_BLE)) {
+    //     bt_hci_write_link_supervision_timeout(device);
+    //     //bt_host_update_sniff_interval();
+    // }
     if (device->ids.type > BT_NONE && bt_hid_init_list[device->ids.type]) {
         bt_hid_init_list[device->ids.type](device);
     }

@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <esp32/rom/ets_sys.h>
 #include "system/intr.h"
 #include "system/gpio.h"
 #include "system/delay.h"
@@ -26,6 +27,9 @@
 #define P2_SEL_PIN 26
 #define P2_D0_PIN 22
 #define P2_D1_PIN 25
+#define P2_D2_PIN 3
+#define P2_D3_PIN 16
+#define P2_D4_PIN 27
 
 #define P1_CLK_MASK (1U << P1_CLK_PIN)
 #define P1_SEL_MASK (1U << P1_SEL_PIN)
@@ -35,6 +39,9 @@
 #define P2_SEL_MASK (1U << P2_SEL_PIN)
 #define P2_D0_MASK (1U << P2_D0_PIN)
 #define P2_D1_MASK (1U << P2_D1_PIN)
+#define P2_D2_MASK (1U << P2_D2_PIN)
+#define P2_D3_MASK (1U << P2_D3_PIN)
+#define P2_D4_MASK (1U << P2_D4_PIN)
 
 #define MOUSE_SPEED_MIN 0xFF
 #define MOUSE_SPEED_MED 0xEF
@@ -42,6 +49,7 @@
 
 #define VTAP_PAL_PIN 16
 #define VTAP_MODE_PIN 27
+#define FC_ONLY_MODE_PIN 33
 
 enum {
     NPISO_CLK = 0,
@@ -64,14 +72,18 @@ enum {
     DEV_SNES_XBAND_KB,
 };
 
-static const uint8_t gpio_pins[NPISO_PORT_MAX][NPISO_PIN_MAX] = {
+static uint8_t gpio_pins[NPISO_PORT_MAX][NPISO_PIN_MAX] = {
     {P1_CLK_PIN, P1_SEL_PIN, P1_D0_PIN, P1_D1_PIN},
     {P2_CLK_PIN, P2_SEL_PIN, P2_D0_PIN, P2_D1_PIN},
 };
 
-static const uint32_t gpio_mask[NPISO_PORT_MAX][NPISO_PIN_MAX] = {
+static uint32_t gpio_mask[NPISO_PORT_MAX][NPISO_PIN_MAX] = {
     {P1_CLK_MASK, P1_SEL_MASK, P1_D0_MASK, P1_D1_MASK},
     {P2_CLK_MASK, P2_SEL_MASK, P2_D0_MASK, P2_D1_MASK},
+};
+
+static const uint8_t kb_gpio_pins[] = {
+    P2_D2_PIN, P2_D3_PIN, P2_D4_PIN,
 };
 
 static uint8_t dev_type[NPISO_PORT_MAX] = {0};
@@ -84,6 +96,11 @@ static uint8_t mouse_update[NPISO_PORT_MAX] = {0};
 static uint8_t mouse_axes[NPISO_PORT_MAX][2] = {0};
 static uint8_t mt_mode = 1; /* multitap starts on 5p mode by default */
 static uint8_t mt_load = 0;
+static uint8_t kb_column = 0;
+static uint32_t kb_data = 0;
+static uint8_t pads_idx[2] = {0};
+static uint32_t pads_data = 0;
+static const uint32_t (*scancodes)[2] = (uint32_t (*)[2])wired_adapter.data[0].output;
 
 static inline void set_data(uint8_t port, uint8_t data_id, uint8_t value) {
     uint32_t mask = gpio_mask[port][NPISO_D0 + data_id];
@@ -307,6 +324,57 @@ static unsigned npiso_isr(unsigned cause) {
             mask[i] >>= 1;
             if (!mask[i]) {
                 mask[i] = 0x80;
+            }
+        }
+    }
+
+    if (high_io) GPIO.status1_w1tc.intr_st = high_io;
+    if (low_io) GPIO.status_w1tc = low_io;
+
+    return 0;
+}
+
+static unsigned npiso_fc_kb_isr(unsigned cause) {
+    const uint32_t low_io = GPIO.acpu_int;
+    const uint32_t high_io = GPIO.acpu_int1.intr;
+
+    /* Update data lines on both edge */
+    if (low_io & P1_SEL_MASK) {
+        if (GPIO.in & P1_SEL_MASK) {
+            kb_data = scancodes[kb_column][1];
+            GPIO.out = kb_data | pads_data;
+            kb_column++;
+        }
+        else {
+            kb_data = scancodes[kb_column][0];
+            GPIO.out = kb_data | pads_data;
+        }
+    }
+
+    /* Reset column counter, set first row nibble */
+    if (high_io & NPISO_LATCH_MASK) {
+        kb_column = 0;
+        pads_data =
+            (((wired_adapter.data[1].output[0] | wired_adapter.data[1].output_mask[0]) & 0x80) ? gpio_mask[0][NPISO_D0] : 0) |
+            (((wired_adapter.data[2].output[0] | wired_adapter.data[2].output_mask[0]) & 0x80) ? gpio_mask[1][NPISO_D0] : 0);
+        kb_data = scancodes[0][0];
+        GPIO.out = kb_data | pads_data;
+        pads_idx[0] = 1;
+        pads_idx[1] = 1;
+    }
+
+    /* Update data lines on rising clock edge */
+    for (uint32_t i = 0; i < NPISO_PORT_MAX; i++) {
+        uint32_t clk_mask = gpio_mask[i][NPISO_CLK];
+        if (low_io & clk_mask) {
+            pads_data &= ~gpio_mask[i][NPISO_D0];
+            pads_data |=
+            ((wired_adapter.data[i + 1].output[0] | wired_adapter.data[i + 1].output_mask[0]) & (0x80 >> pads_idx[i])) ? gpio_mask[i][NPISO_D0] : 0;
+            GPIO.out = kb_data | pads_data;
+            pads_idx[i]++;
+            if (pads_idx[i] == 9) {
+                ++wired_adapter.data[i + 1].frame_cnt;
+                npiso_gen_turbo_mask(&wired_adapter.data[i + 1]);
             }
         }
     }
@@ -583,8 +651,25 @@ void npiso_init(uint32_t package)
             io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
             io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
             gpio_config_iram(&io_conf);
-            set_data(i, j &  0x1, 1);
+            set_data(i, j & 0x1, 1);
         }
+    }
+
+    /* D2, D3, D4 */
+    for (uint32_t i = 0; i < sizeof(kb_gpio_pins); i++) {
+        io_conf.pin_bit_mask = 1ULL << kb_gpio_pins[i];
+        gpio_config_iram(&io_conf);
+        GPIO.out_w1ts = 1U << kb_gpio_pins[i];
+    }
+
+    /* P1 Select */
+    if (dev_type[0] == DEV_FC_KB) {
+        io_conf.intr_type = GPIO_INTR_ANYEDGE;
+        io_conf.pin_bit_mask = 1ULL << P1_SEL_PIN;
+        io_conf.mode = GPIO_MODE_INPUT;
+        io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+        io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
+        gpio_config_iram(&io_conf);
     }
 
     /* P2 Select */
@@ -611,8 +696,35 @@ void npiso_init(uint32_t package)
         gpio_set_level_iram(VTAP_MODE_PIN, 1);
     }
 
+    /* Famicom port only detect */
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    io_conf.pin_bit_mask = 1ULL << FC_ONLY_MODE_PIN;
+    io_conf.mode = GPIO_MODE_INPUT;
+    io_conf.pull_down_en = GPIO_PULLDOWN_ENABLE;
+    io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+    gpio_config_iram(&io_conf);
+    if (GPIO.in1.val & (1U << (FC_ONLY_MODE_PIN - 32))) {
+        ets_printf("# Famicom only mode enable\n");
+        gpio_pins[0][NPISO_D0] = P1_D1_PIN;
+        gpio_mask[0][NPISO_D0] = P1_D1_MASK;
+        if (!(dev_type[0] == DEV_FC_KB)) {
+            gpio_pins[1][NPISO_D0] = P2_D1_PIN;
+            gpio_mask[1][NPISO_D0] = P2_D1_MASK;
+        }
+        fs_id[0] = 0xDF;
+        fs_id[1] = 0xEF;
+    }
+    else {
+        if (dev_type[0] == DEV_FC_KB) {
+            gpio_mask[0][NPISO_D0] |= P1_D1_MASK;
+        }
+    }
+
     if (dev_type[1] == DEV_SFC_SNES_MULTITAP) {
         intexc_alloc_iram(ETS_GPIO_INTR_SOURCE, 19, npiso_sfc_snes_5p_isr);
+    }
+    else if (dev_type[0] == DEV_FC_KB) {
+        intexc_alloc_iram(ETS_GPIO_INTR_SOURCE, 19, npiso_fc_kb_isr);
     }
     else {
         intexc_alloc_iram(ETS_GPIO_INTR_SOURCE, 19, npiso_isr);

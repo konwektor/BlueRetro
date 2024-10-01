@@ -8,6 +8,8 @@
 
 #include "hidp.h"
 
+#define BT_HIDP_SW_RUMBLE_IDLE 0x40400100
+
 struct bt_hid_sw_axis_calib {
     union {
         struct {
@@ -40,7 +42,10 @@ struct bt_hid_sw_ctrl_calib {
 #define BT_HIDP_SW_SUBCMD_EN_RUMBLE 0x48
 struct bt_hidp_sw_conf {
     uint8_t tid;
-    uint8_t rumble[8];
+    union {
+        uint8_t rumble[8];
+        uint32_t rumble32[2];
+    };
     uint8_t subcmd;
     union {
         uint8_t subcmd_data[38];
@@ -49,6 +54,15 @@ struct bt_hidp_sw_conf {
             uint16_t tbd;
             uint8_t len;
         };
+    };
+} __packed;
+
+#define BT_HIDP_SW_SET_RUMBLE 0x10
+struct bt_hidp_sw_rumble {
+    uint8_t tid;
+    union {
+        uint8_t rumble[8];
+        uint32_t rumble32[2];
     };
 } __packed;
 
