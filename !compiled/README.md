@@ -1,5 +1,5 @@
 "Ready to go files"  for people who got problems with compilators, IDF etc(I know how annoying this could be), under Windows.
-Just go to releases and download "Blueretro+Ogx360 *.zip" file.
+Just go to releases and download "BROgx360.zip" file.
 Use HW1 version as standard - no changes in wiring.
 HW2 is for internal build.
 ## ESP32  part :
@@ -23,9 +23,10 @@ Click START - and done.
 
 * Download avrdude-6.3-mingw32.zip for Windows from  [avrdude](http://download.savannah.gnu.org/releases/avrdude/), and unzip it where you wish to.
 *   Determine what COM number Arduino appears in the device manager.
+*   Download firmware from https://github.com/konwektor/ogx360/releases/download/v1.00/Ogx360.zip
 * Go into command prompt in Windows, change folder to avrdudes folder
 * write command:
-avrdude -C avrdude.conf -F -p atmega32u4 -c avr109 -b 57600 -P COMx -Uflash:w:ogx360.hex:i
+avrdude -C avrdude.conf -F -p atmega32u4 -c avr109 -b 57600 -P COMx -Uflash:w:firmware.hex:i
 * !ALter COMx with Yours for arduino!
 * Done.
 
