@@ -45,6 +45,8 @@ static void face_btns_trigger_to_6buttons(struct raw_src_mapping *map) {
 static void trigger_pri_sec_invert(struct raw_src_mapping *map) {
     uint32_t tmp = map->btns_mask[PAD_LM];
 
+    map->desc[0] &= ~0x11000000;
+
     map->btns_mask[PAD_LM] = map->btns_mask[PAD_LS];
     map->btns_mask[PAD_LS] = tmp;
 
@@ -146,6 +148,11 @@ enum {
 };
 
 static void stadia(struct raw_src_mapping *map) {
+    map->mask[0] = 0xBBFF1FFF;
+    map->desc[0] = 0x110000FF;
+
+    memset(map->btns_mask, 0, sizeof(map->btns_mask));
+
     map->btns_mask[PAD_RD_LEFT] = BIT(STADIA_CAPTURE);
     map->btns_mask[PAD_RB_LEFT] = BIT(STADIA_X);
     map->btns_mask[PAD_RB_RIGHT] = BIT(STADIA_B);

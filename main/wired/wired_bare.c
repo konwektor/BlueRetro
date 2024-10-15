@@ -80,7 +80,7 @@ static const wired_init_t wired_init[WIRED_MAX] = {
     NULL, /* PARALLEL_1P_OD */
     NULL, /* PARALLEL_2P_OD */
     NULL, /* SEA_BOARD */
-    NULL, //ogx360_init, /* OGX360 */
+    ogx360_i2c_init, /* OGX360 */
 };
 
 static const wired_port_cfg_t wired_port_cfg[WIRED_MAX] = {
@@ -108,9 +108,10 @@ static const wired_port_cfg_t wired_port_cfg[WIRED_MAX] = {
     NULL, /* PARALLEL_1P_OD */
     NULL, /* PARALLEL_2P_OD */
     NULL, /* SEA_BOARD */
-    NULL, /* OGX360 */
+    ogx360_i2c_port_cfg, /* OGX360 */
 
 };
+
 void wired_bare_init(uint32_t package) {
     if (wired_init[wired_adapter.system_id]) {
         wired_init[wired_adapter.system_id](package);

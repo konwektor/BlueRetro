@@ -1,11 +1,12 @@
 /*
- * Copyright (c) 2019-2023, Jacques Gagnon
+ * Copyright (c) 2019-2024, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <string.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <nvs_flash.h>
 #include <esp_ota_ops.h>
 #include <esp32/rom/ets_sys.h>
 #include <soc/efuse_reg.h>
@@ -56,11 +57,11 @@ static void wired_init_task(void) {
         wired_adapter.system_id = config.global_cfg.system_cfg;
         ets_printf("# Config override system : %d: %s\n", wired_adapter.system_id, wired_get_sys_name());
     }
-
+ets_printf("bufor init \n");
     for (uint32_t i = 0; i < WIRED_MAX_DEV; i++) {
         adapter_init_buffer(i);
     }
-
+ets_printf("po buforze \n");
     struct raw_fb fb_data = {0};
     const char *sysname = wired_get_sys_name();
     fb_data.header.wired_id = 0;
@@ -68,10 +69,12 @@ static void wired_init_task(void) {
     fb_data.header.data_len = strlen(sysname);
     memcpy(fb_data.data, sysname, fb_data.header.data_len);
     adapter_q_fb(&fb_data);
-
+ets_printf("po raw_fb - idzie wired bare_init \n");
     if (wired_adapter.system_id < WIRED_MAX) {
         wired_bare_init(chip_package);
     }
+    ets_printf("po bare_init - gpio_pins[] wstaly \n");
+
 }
 
 static void wl_init_task(void *arg) {
@@ -82,6 +85,7 @@ static void wl_init_task(void *arg) {
     esp_ota_get_state_partition(running, &ota_state);
 
     chip_package = esp_efuse_get_pkg_ver();
+    printf("Chip package: %lu\n", chip_package);
 
     err_led_init(chip_package);
 
@@ -94,6 +98,14 @@ static void wl_init_task(void *arg) {
         printf("FS init fail!\n");
     }
 #endif
+
+    /* Initialize NVS for PHY cal and default config */
+    int32_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
 
     config_init(DEFAULT_CFG);
 

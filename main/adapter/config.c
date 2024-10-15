@@ -1,11 +1,13 @@
 /*
- * Copyright (c) 2019-2023, Jacques Gagnon
+ * Copyright (c) 2019-2024, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <errno.h>
+#include "nvs.h"
 #include "zephyr/types.h"
 #include "tools/util.h"
 #include "adapter.h"
@@ -14,6 +16,92 @@
 #include "adapter/gameid.h"
 
 struct config config;
+struct hw_config hw_config = {
+    .external_adapter = 0,
+    .hotplug = 0,
+    .hw1_ports_led_pins = {2, 4, 12, 15},
+    .led_flash_duty_cycle = 0x80000,
+    .led_flash_hz = {2, 4, 8},
+    .led_flash_off_duty_cycle = 0,
+    .led_flash_on_duty_cycle = 0xFFFFF,
+    .led_pulse_duty_max = 2000,
+    .led_pulse_duty_min = 50,
+    .led_pulse_fade_cycle_delay_ms = 500,
+    .led_pulse_fade_time_ms = 500,
+    .led_pulse_hz = 5000,
+    .led_pulse_off_duty_cycle = 0,
+    .led_pulse_on_duty_cycle = 0x1FFF,
+    .port_cnt = 2,
+    .ports_sense_input_polarity = 0,
+    .ports_sense_output_ms = 1000,
+    .ports_sense_output_od = 0,
+    .ports_sense_output_polarity = 0,
+    .ports_sense_p3_p4_as_output = 0,
+    .power_pin_is_hold = 0,
+    .power_pin_od = 0,
+    .power_pin_polarity = 0,
+    .power_pin_pulse_ms = 20,
+    .reset_pin_od = 1,
+    .reset_pin_polarity = 0,
+    .reset_pin_pulse_ms = 500,
+    .sw_io0_hold_thres_ms = {1000, 3000, 6000},
+    .ps_ctrl_colors = {
+        0xFF0000, /* Blue */
+        0x0000FF, /* Red */
+        0x00FF00, /* Green */
+        0xFF00FF, /* Pink */
+        0xFFFF00, /* Cyan */
+        0x0080FF, /* Orange */
+        0x00FFFF, /* Yellow */
+        0xFF0080, /* Purple */
+    },
+};
+
+static char *hw_config_name_idx[] = {
+    "ext_adapter",
+    "hotplug",
+    "hw1_led_pins_0",
+    "hw1_led_pins_1",
+    "hw1_led_pins_2",
+    "hw1_led_pins_3",
+    "led_flash_duty",
+    "led_flash_hz_0",
+    "led_flash_hz_1",
+    "led_flash_hz_2",
+    "led_f_off_duty",
+    "led_f_on_duty",
+    "led_p_duty_max",
+    "led_p_duty_min",
+    "led_p_fade_c_ms",
+    "led_p_fade_t_ms",
+    "led_pulse_hz",
+    "led_p_off_duty",
+    "led_p_on_duty",
+    "port_cnt",
+    "ports_s_in_pol",
+    "ports_s_out_ms",
+    "ports_s_out_od",
+    "ports_s_out_pol",
+    "ports_s_out_en",
+    "pwr_pin_is_hold",
+    "pwr_pin_od",
+    "pwr_pin_pol",
+    "pwr_pin_p_ms",
+    "reset_pin_od",
+    "reset_pin_pol",
+    "reset_pin_p_ms",
+    "sw_thres_ms_0",
+    "sw_thres_ms_1",
+    "sw_thres_ms_2",
+    "ps_ctrl_color_0",
+    "ps_ctrl_color_1",
+    "ps_ctrl_color_2",
+    "ps_ctrl_color_3",
+    "ps_ctrl_color_4",
+    "ps_ctrl_color_5",
+    "ps_ctrl_color_6",
+    "ps_ctrl_color_7",
+};
 static uint32_t config_src = DEFAULT_CFG;
 static uint32_t config_version_magic[] = {
     CONFIG_MAGIC_V0,
@@ -26,6 +114,7 @@ static uint8_t config_default_combo[BR_COMBO_CNT] = {
 };
 
 static void config_init_struct(struct config *data);
+static void config_init_nvs_patch(struct config *data);
 static int32_t config_load_from_file(struct config *data, char *filename);
 static int32_t config_store_on_file(struct config *data, char *filename);
 static int32_t config_v0_update(struct config *data, char *filename);
@@ -79,6 +168,7 @@ static int32_t config_v1_update(struct config *data, char *filename) {
 fail:
     printf("%s: Update failed, reset config (Sorry!)\n", __FUNCTION__);
     config_init_struct(data);
+    config_init_nvs_patch(data);
     return config_store_on_file(data, filename);
 }
 
@@ -110,6 +200,15 @@ static int32_t config_v2_update(struct config *data, char *filename) {
     }
 
     return config_store_on_file(data, filename);
+}
+
+static int32_t hw_config_lookup_key_name(const char* key) {
+    for (uint32_t i = 0; i < sizeof(hw_config_name_idx)/sizeof(*hw_config_name_idx); i++) {
+        if (strstr(key, hw_config_name_idx[i]) != NULL) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 static void config_init_struct(struct config *data) {
@@ -149,9 +248,80 @@ static void config_init_struct(struct config *data) {
     }
 }
 
+static void config_init_nvs_patch(struct config *data) {
+    esp_err_t err;
+    nvs_handle_t nvs;
+    uint8_t value;
+
+    err = nvs_open("global", NVS_READONLY, &nvs);
+    if (err == ESP_OK) {
+        err = nvs_get_u8(nvs, "system", &value);
+        if (err == ESP_OK) {
+            data->global_cfg.system_cfg = value;
+        }
+        err = nvs_get_u8(nvs, "multitap", &value);
+        if (err == ESP_OK) {
+            data->global_cfg.multitap_cfg = value;
+        }
+        err = nvs_get_u8(nvs, "inquiry", &value);
+        if (err == ESP_OK) {
+            data->global_cfg.inquiry_mode = value;
+        }
+        err = nvs_get_u8(nvs, "bank", &value);
+        if (err == ESP_OK) {
+            data->global_cfg.banksel = value;
+        }
+        nvs_close(nvs);
+    }
+
+    err = nvs_open("output", NVS_READONLY, &nvs);
+    if (err == ESP_OK) {
+        err = nvs_get_u8(nvs, "mode", &value);
+        if (err == ESP_OK) {
+            for (uint32_t i = 0; i < WIRED_MAX_DEV; i++) {
+                data->out_cfg[i].dev_mode = value;
+            }
+        }
+        err = nvs_get_u8(nvs, "accessories", &value);
+        if (err == ESP_OK) {
+            for (uint32_t i = 0; i < WIRED_MAX_DEV; i++) {
+                data->out_cfg[i].acc_mode = value;
+            }
+        }
+        nvs_close(nvs);
+    }
+
+    err = nvs_open("mapping", NVS_READONLY, &nvs);
+    if (err == ESP_OK) {
+        nvs_iterator_t it = NULL;
+        err = nvs_entry_find_in_handle(nvs, NVS_TYPE_ANY, &it);
+        while (err == ESP_OK) {
+            nvs_entry_info_t info;
+            nvs_entry_info(it, &info);
+            errno = 0;
+            uint32_t index = strtol(info.key, NULL, 10);
+            if (!errno) {
+                struct map_cfg mapping = {0};
+                size_t size = sizeof(struct map_cfg);
+                err = nvs_get_blob(nvs, info.key, &mapping, &size);
+                if (err == ESP_OK) {
+                    for (uint32_t i = 0; i < WIRED_MAX_DEV; i++) {
+                        memcpy(&data->in_cfg[i].map_cfg[index], &mapping, sizeof(struct map_cfg));
+                        data->in_cfg[i].map_cfg[index].dst_id = i;
+                    }
+                }
+            }
+            err = nvs_entry_next(&it);
+        }
+        nvs_release_iterator(it);
+        nvs_close(nvs);
+    }
+}
+
 static int32_t config_load_from_file(struct config *data, char *filename) {
 #ifdef CONFIG_BLUERETRO_QEMU
     config_init_struct(data);
+    config_init_nvs_patch(data);
     return 0;
 #else
     struct stat st;
@@ -160,6 +330,7 @@ static int32_t config_load_from_file(struct config *data, char *filename) {
     if (stat(filename, &st) != 0) {
         printf("%s: No config on FS. Creating...\n", __FUNCTION__);
         config_init_struct(data);
+        config_init_nvs_patch(data);
         ret = config_store_on_file(data, filename);
     }
     else {
@@ -210,6 +381,32 @@ static int32_t config_store_on_file(struct config *data, char *filename) {
         ret = 0;
     }
     return ret;
+}
+
+void hw_config_patch(void) {
+    esp_err_t err;
+    nvs_handle_t nvs;
+
+    err = nvs_open("hw", NVS_READONLY, &nvs);
+    if (err == ESP_OK) {
+        nvs_iterator_t it = NULL;
+        err = nvs_entry_find_in_handle(nvs, NVS_TYPE_ANY, &it);
+        while (err == ESP_OK) {
+            nvs_entry_info_t info;
+            nvs_entry_info(it, &info);
+            int32_t index = hw_config_lookup_key_name(info.key);
+            if (index > -1) {
+                uint32_t value;
+                err = nvs_get_u32(nvs, info.key, &value);
+                if (err == ESP_OK) {
+                    hw_config.data32[index] = value;
+                }
+            }
+            err = nvs_entry_next(&it);
+        }
+        nvs_release_iterator(it);
+        nvs_close(nvs);
+    }
 }
 
 void config_init(uint32_t src) {

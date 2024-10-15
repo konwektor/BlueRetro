@@ -1,5 +1,7 @@
 "Ready to go files"  for people who got problems with compilators, IDF etc(I know how annoying this could be), under Windows.
 Just go to releases and download "Blueretro+Ogx360 *.zip" file.
+Use HW1 version as standard - no changes in wiring.
+HW2 is for internal build.
 ## ESP32  part :
 I am using esp32-wroom32d DevkitC V4. 
 Dowload [flash download tool](https://www.espressif.com/sites/default/files/tools/flash_download_tool_3.9.5.zip) 
@@ -27,103 +29,74 @@ avrdude -C avrdude.conf -F -p atmega32u4 -c avr109 -b 57600 -P COMx -Uflash:w:og
 * !ALter COMx with Yours for arduino!
 * Done.
 
-* 
+ 
 ## Connections
+
+BE AVARE: ESP32 logic is 3,3Volt!.
+
+Arduino pro micro (leonardo) needed for ogx360 is 16MHz version, 5Volt - that means his logic is also 5Volt!!.
+
+Connecting those two, CAN DAMAGE YOUR ESP32!!!!
+
+However it works - and the question is: for how much long??  It is not safe for esp32 3,3V logic.
+
+For safety use Bidirectional Level shifter!!!
+
+like this one :
+
+<img src="./Images/Level Shifter.jpg" alt="flash2"/>  
+
+Search for example "4 Channels IIC I2C Logic Level Converter Bi-Directional Module 3.3V to 5V Shifter for Arduino" in Your favourite shopping site.
+
+
+
+
+
+
 
 
 Wiring
+
+
 For Player 1: Connect right side pin6 (A2), and pin7 (A1) on the Arduino to ground(GND).
 
-For Player 2: Connect right side pin7 (A1) on the Arduino to Ground.
+For Player 2: Connect right side pin7 (A1) on the Arduino to (GND).
 
-For Player 3: Connect right side pin6 (A2) on the Arduino to Ground.
+For Player 3: Connect right side pin6 (A2) on the Arduino to (GND).
 
 For Player 4: Don't connect any additional pins to ground.
 
 <img src="./Images/Arduino pinouts.jpg" alt="flash2"/>  
 
 
-Connect right side pin1 (RAW) on  all Arduinos together (it`s a main 5V for arduino), with left side bottom 5V pin on ESP32.
+Connect right side pin1 (RAW) from Arduino for Player1, with left side bottom (5V) pin on ESP32, and with Level shifter (HV).
 
-Connect  ground pins (GND) of all the boards together.
+Connect (GND) from Arduino for Player1 with Level shifter (GND) on HV side.
 
-Connect left side pin8 (D2) on all Arduinos together.
+If You got more Arduino boards connect (GND) from all Arduino boards together.
 
-Connect left side pin7 (D3) on all Arduinos together.
+Connect left side pin8 (D2) on all Arduinos together and with Level shifter (HV1)
 
-Connect right side pin22 (SCL) from Esp32 with Arduinos pin8 (D2).
+Connect left side pin7 (D3) on all Arduinos together and with Level shifter (HV2)
 
-Connect right side pin21 (SDA) from Esp32 with Arduinos pin7 (D3).
+Connect  ground pin (GND) from ESP32 with Level shifter (GND) on LV side. 
 
-Connect Your arduino to xbox with Xbox Controller Port to MicroUSB cable.
+Connect right side pin22 (SCL) from Esp32 with Level shifter (LV1).
 
-
-
+Connect right side pin21 (SDA) from Esp32 with Level shifter (LV2).
 
 
 <img src="./Images/Esp32 pinouts.jpg" alt="flash2"/>  
 
-BE AVARE: esp32 logic is 3,3Volt!.
+From version 24.04 port detection and hotplug is working in HW2. HW1 wirings doesnt change.
 
-Arduino pro micro (leonardo) needed for ogx360 is 16MHz version, 5Volt - that means his logic is also 5Volt!!.
+HW2 need a lot of extra wirings -  not experienced in electronic users should stay with HW1.
 
-I realized that after smth about hour of tests.  
+For general info check darthcloud`s wiki about it: 
 
-Connecting those two, CAN DAMAGE YOUR ESP32!!!!
-
-However it works - and the question is: for how much long??  it is not safe for esp32 3,3V logic.
-
-Now I am using for safety Bidirectional Level shifter
-
-like this one :
-
-<img src="./Images/Level Shifter.jpg" alt="flash2"/>  
-
-Just search for example "4 Channels IIC I2C Logic Level Converter Bi-Directional Module 3.3V to 5V Shifter for Arduino" in Your favourite shopping site.
-
-Or ignore that, and jump into action in Your favourite ogXbox game.
+https://github.com/darthcloud/BlueRetro/wiki/BlueRetro-HW2-Internal-Install-Specification
 
 
-
-
-## Update without level shifter
-
-I have made some trick, and suprising - it works.
-
-
-  After accidently shorted U2(LDO regulator), I remove it and  powered my "pro micro board" with 3,3V from esp32.  
-
-On Arduino :take out cable from pin1 (RAW), and connect to pin4(Vcc).
-
-ON esp32 : take out  cable from bottom left pin5V and connect it to top left pin 3V3.
-
-In this configuration Esp32 need to be powered up over MicroUSB socket.
-
-Now everything will be powered from Esp32 board over usb socket, onboard LDO lowers 5V to 3,3V - powering esp32 and over pin3v3 - Arduino/s 
-
-SDA, SCL are now 3,3V logic.
-
-From atmega32u datasheet stays that 16MHz version need to be powered with 5V, lower voltage means lower cpu clock. 
-
-Coresponding to this diagram Arduino is working  now with 8MHz clock.
-
-
-
-
-
-
-
-<img src="Atmega32u4 Clock Vs Vcc - Imgur.jpg"/>
-
-
-
-
-
-Ogx360 is written specialy for 16MHz version of Arduino. Now clock is lower, and i didnt feel any difference. 
-
-So I do not know what have really changed in clocks settings, but Voltage is now safe for esp32. 
-
-Need to make more test and compare to orginal version to see if something is slower, or worse.
 
 
 
