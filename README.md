@@ -1,8 +1,20 @@
 
 
 This is a modified version of BlueRetro with support for sending commands to an OGX360 over I2C. 
-<br>See https://github.com/netham45/ogx360 for a compatible build of ogx360.
+See https://github.com/kkonwektor/ogx360 for a compatible build of ogx360.
 <BR>
+
+v24.04 Latest
+
+Based on BlueRetro v24.04
+
+    Fixed rumble with i2c repeated start - gamepads are not hanging anymore for 1 sec - tested with wiiu and ps4
+    Added hw2 internal/external support
+    Added port detection in hw2
+    Added rubmle feedback for actually used port - push xbox button and gamepad will rumble shortly x-times , where x is port number used
+
+This version need also updating arduino firmware in case of use hw2, use mine fork at https://github.com/konwektor/ogx360.
+hw1 doesn`t need arduino firmware update if You have used already ogx360 fork for BlueRetro support.
 
 Small detailed info in [!compiled](https://github.com/konwektor/BlueRetro/tree/master/!compiled).
 <br>
@@ -19,24 +31,20 @@ Or just go to [Releases](https://github.com/konwektor/BlueRetro/releases), and d
 
 
 - All Xbox one x/s series x/s controllers working with rumble, no delay no stuck.
+- Wiiu pro rumble tested and working
+- Ps4 rumble tested and working
 
 - All other bluetooth gamepads supported by Blueretro should work - not tested - got any???? Give me feedback.
 
 <BR>
 
-- PS5 controller with rumble - branch "ervin"
+
 <BR>
  
- - look to [Davidxgames](https://github.com/davidxgames) or [XGAMES VIDEOJUEGOS](https://www.youtube.com/@XGAMESVIDEOJUEGOS),  - video how to do mod, assembly instruction and re compiled files ready to go.   
-   (channel in spanish).
+ - look to [Davidxgames](https://github.com/davidxgames) or [XGAMES VIDEOJUEGOS](https://www.youtube.com/@XGAMESVIDEOJUEGOS),  - video how to do mod, assembly instruction and compiled files ready to go  (based o BlueRetro 1.8.x I think) -channel in spanish.
 
     Respect and many BIG Thanks goes to Ervin: [Eolvera85](https://github.com/eolvera85):- author of PS5 support patch.
 
-  
-- PS4, WiiU pro controllers tested and working -timeout issue with rumble enabled - not responding for 1 sec - to fix. (Source based on Blueretro v1.9 and if compiled as internal - less timeouts but still     
-  there).
-  
-- All other bluetooth gamepads supported by Blueretro should work - not tested - got any???? Give me feedback.
 
 
 <BR>
