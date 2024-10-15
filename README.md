@@ -1,7 +1,7 @@
 
 
 This is a modified version of BlueRetro with support for sending commands to an OGX360 over I2C. 
-See https://github.com/kkonwektor/ogx360 for a compatible build of ogx360.
+See https://github.com/konwektor/ogx360 for a compatible build of ogx360.
 <BR>
 
 v24.04 Latest
