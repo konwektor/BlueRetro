@@ -285,6 +285,7 @@ static void wired_port_hdl(void) {
             idx++;
         }
 
+        // Sprawdzenie, czy urządzenie BT jest gotowe
         bt_ready = atomic_test_bit(&device->flags, BT_DEV_HID_INIT_DONE);
 
 #ifdef CONFIG_BLUERETRO_HW2
@@ -306,6 +307,7 @@ static void wired_port_hdl(void) {
             }
         }
 
+        // Błędy LED, jeśli port nie jest gotowy
         if (!bt_ready && !err_led_set) {
             uint8_t new_led = (device->ids.out_idx < hw_config.port_cnt) ? get_port_led_pin(device->ids.out_idx) : 0;
 

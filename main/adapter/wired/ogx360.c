@@ -14,10 +14,15 @@
 #include "ogx360.h"
 
 bool rumble_pending = false;
-static int rumble_phase = 0;  // 0: Left, 1: Right, 2: Both
-esp_timer_handle_t rumble_timer = NULL; 
-
-
+//void trigger_special_rumble(int wired_index, int repetitions);
+static int current_repetition = 0;
+static int total_repetitions = 0;
+static esp_timer_handle_t rumble_timer = NULL;
+void rumble_timer_callback(void* arg);
+uint8_t active_ports[OGX360_I2C_PORT_MAX] = {0}; // 0 - nieaktywny, 1 - aktywny
+//#ifdef CONFIG_BLUERETRO_SYSTEM_OGX360
+//extern uint8_t active_ports[OGX360_I2C_PORT_MAX]; // Deklaracja zewnętrzna
+//#endif
 //#define BIT(x) (1<<x)
 
 #define BUTTON_MASK_SIZE 32
@@ -70,15 +75,6 @@ typedef struct __attribute__((packed)) usbd_duke_out
     uint8_t  axis8[NUM_8BIT_AXIS];
     uint16_t axis16[NUM_16BIT_AXIS];
 } usbd_duke_out_t;
-
-/* typedef struct __attribute__((packed)) usbd_duke_in
-{
-    uint8_t  startByte; // 0x00
-    uint8_t  bLength;   // 0x06
-    uint16_t lValue;    // Left Rumble
-    uint16_t hValue;    // Right Rumble
-} usbd_duke_in_t;
-*/
 
 static DRAM_ATTR const uint8_t ogx360_axes_idx[ADAPTER_MAX_AXES] =
 {
@@ -141,23 +137,6 @@ void IRAM_ATTR ogx360_init_buffer(int32_t dev_mode, struct wired_data *wired_dat
             }
 
             
-            // Debugowanie po inicjalizacji
- /*           printf("Debug: Po inicjalizacji duke_out\n");
-            printf("controllerType: %02x\n", duke_out->controllerType);
-            printf("startByte: %02x\n", duke_out->startByte);
-            printf("bLength: %02x\n", duke_out->bLength);
-            printf("wButtons: %04x\n", duke_out->wButtons);
-            for (uint32_t i = 0; i < NUM_ANALOG_BUTTONS; i++) {
-                printf("analogButton[%lu]: %02x\n", i, duke_out->analogButtons[i]);
-            }
-            for (uint32_t i = 0; i < NUM_8BIT_AXIS; i++) {
-                printf("axis8[%lu]: %02x\n", i, duke_out->axis8[i]);
-            }
-            for (uint32_t i = 0; i < NUM_16BIT_AXIS; i++) {
-                printf("axis16[%lu]: %04x\n", i, duke_out->axis16[i]);
-            }
-            */
-           
             // Initialize mask structure
             duke_out_mask->controllerType = 0x00;
             duke_out_mask->startByte = 0x00;
@@ -181,11 +160,6 @@ void IRAM_ATTR ogx360_init_buffer(int32_t dev_mode, struct wired_data *wired_dat
     }
 }
 
-
-//void ogx360_acc_toggle_fb(uint32_t wired_id, uint16_t left_motor, uint16_t right_motor);
-
-
-
 void ogx360_meta_init(struct wired_ctrl *ctrl_data) {
     memset((void *)ctrl_data, 0, sizeof(*ctrl_data)*4);
 
@@ -207,96 +181,63 @@ void ogx360_meta_init(struct wired_ctrl *ctrl_data) {
     }
 }
 
-void ogx360_toggle_fb(uint32_t wired_id, uint32_t duration_us, uint16_t left_motor, uint16_t right_motor) {
+void ogx360_acc_toggle_fb(uint32_t wired_id, uint32_t duration_us, uint16_t left_motor, uint16_t right_motor) {
     struct bt_dev *device = NULL;
     struct bt_data *bt_data = NULL;
-    printf("# ogx360_toggle_fb: wired_id=%lu, duration=%lu, left=%u, right=%u\n", wired_id, duration_us, left_motor, right_motor);
+    //printf("# ogx360_toggle_fb: wired_id=%lu, duration=%lu, left=%u, right=%u\n", wired_id, duration_us, left_motor, right_motor);
+     if (rumble_pending && duration_us == 0) {
+        return;
+    }
 
     bt_host_get_dev_from_out_idx(wired_id, &device);
     if (device) {
-        printf("# ogx360_toggle_fb: Device found\n");
+        //printf("# ogx360_toggle_fb: Device found\n");
         bt_data = &bt_adapter.data[device->ids.id];
         if (bt_data) {
-            printf("# ogx360_toggle_fb: bt_data found\n");
+           // printf("# ogx360_toggle_fb: bt_data found\n");
             struct generic_fb fb_data = {0};
 
             fb_data.wired_id = wired_id;
             fb_data.type = FB_TYPE_RUMBLE;
             fb_data.cycles = 0;
             fb_data.start = 0;
-            fb_data.state = 1;
+            fb_data.state = (left_motor || right_motor);
             fb_data.left_motor = left_motor;
             fb_data.right_motor = right_motor;
 
-            if (duration_us > 0) {
+            if (duration_us > 0) { //start with timer for definied time
                 adapter_fb_stop_timer_start(wired_id, duration_us);
-            } else {
-                adapter_fb_stop_timer_start(wired_id, 0); // Natychmiastowe zatrzymanie
             }
-            
+            //without timer just proceed with data  
             wireless_fb_from_generic(&fb_data, bt_data);
-            printf("# ogx360_toggle_fb: Sending feedback\n");
+           // printf("# ogx360_acc_toggle_fb: Sending feedback\n");
             bt_hid_feedback(device, bt_data->base.output);
         } else {
-            printf("# ogx360_toggle_fb: bt_data not found\n");
+            printf("# ogx360_acc_toggle_fb: bt_data not found\n");
         }
     } else {
-        printf("# ogx360_toggle_fb: Device not found\n");
+        printf("# ogx360_acc_toggle_fb: Device not found\n");
     }
 }
 
+void trigger_special_rumble(int wired_index, int repetitions) {
+  //  static int current_repetition = 0;
+    //static int total_repetitions = 0;
 
-/*
-void rumble_timer_callback(void* arg) {
-    rumble_pending = false;
-    printf("# %s: Rumble ended\n", __FUNCTION__);
-}
-*/
-void rumble_timer_callback(void* arg) {
-    uint32_t wired_index = (uint32_t)(uintptr_t)arg;
-    printf("# rumble_timer_callback: Starting rumble for wired index %lu, phase %d\n", wired_index, rumble_phase);
-    switch (rumble_phase) {
-        case 0:
-            ogx360_toggle_fb(wired_index, 2000000, 0XFFFF, 0x0000);
-            rumble_phase = 1;
-            printf("# rumble_timer_callback: Rumble left motor for wired index %lu\n", wired_index);
-            printf("# %s: Rumble left motor\n", __FUNCTION__);
-            esp_timer_start_once(rumble_timer, 3060000);  
-            break;
-        case 1:
-            ogx360_toggle_fb(wired_index, 1250000, 0x0000, 0XFFFF);
-            rumble_phase = 2;
-            printf("# %s: Rumble right motor\n", __FUNCTION__);
-            esp_timer_start_once(rumble_timer, 2510000);
-            break;
-        case 2:
-            ogx360_toggle_fb(wired_index, 3250000, 0XFFFF, 0XFFFF);
-            rumble_phase = 3;
-            printf("# %s: Rumble both motors\n", __FUNCTION__);
-            esp_timer_start_once(rumble_timer, 3350000);
-            break;
-        case 3:
-            rumble_phase = 0;    
-            esp_timer_stop(rumble_timer);
-            rumble_pending = false;
-            printf("# rumble_timer_callback: rumble_pending set to false after all phases\n");
-            break;
-    }
-}
-void ogx360_ctrl_special_action(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
-    if (ctrl_data->map_mask[0] & generic_btns_mask[PAD_MT]) {
-        if (ctrl_data->btns[0].value & generic_btns_mask[PAD_MT]) {
-            if (!atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE)) {
-                atomic_set_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
-            }
+    if (current_repetition == 0) {
+        // Rozpoczynamy nową sekwencję wibracji
+        total_repetitions = repetitions;
+        current_repetition = 1;
         } else {
-           if (atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE)) {
-                atomic_clear_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
+        current_repetition++;
+    }
+
                 rumble_pending = true;
-                int wired_index = ctrl_data->index;
+    printf("# trigger_special_rumble: rumble_pending set to true for wired index %d (repetition %d/%d)\n", 
+           wired_index, current_repetition, total_repetitions);
                 
-                printf("# ogx360_ctrl_special_action: rumble_pending set to true for wired index %d\n", wired_index);
-                rumble_phase = 0;
+    // Uruchom wibracje na 550ms z pełną mocą obu silników
+    ogx360_acc_toggle_fb(wired_index, 400000, 0xFFFF, 0xFFFF);     
                 
                 // Delete existing timer if it exists
                 if (rumble_timer != NULL) {
@@ -312,11 +253,55 @@ void ogx360_ctrl_special_action(struct wired_ctrl *ctrl_data, struct wired_data 
                 };
                 esp_timer_create(&timer_args, &rumble_timer);
                 
-                esp_timer_start_once(rumble_timer, 250000);
+    // Uruchom timer na 650ms
+    esp_timer_start_once(rumble_timer, 650000);
             } 
+
+void rumble_timer_callback(void* arg) {
+    uint32_t wired_index = (uint32_t)(uintptr_t)arg;
+printf("# rumble_timer_callback: Stopping rumble for wired port index %lu \n", wired_index);
+    ogx360_acc_toggle_fb(wired_index, 0, 0, 0);  // Zatrzymaj wibracje
+
+    if (current_repetition < total_repetitions) {
+        // Jeśli nie ma jeszcze wymaganej liczby powtórzeń, wywołaj ponownie trigger_special_rumble
+        trigger_special_rumble(wired_index, 0);  // 0 jako drugi argument, aby kontynuować sekwencję
+    } else {
+        //wymaganą liczba powtórzeń osiagnieta, resetujemy liczniki i flagę
+        current_repetition = 0;
+        total_repetitions = 0;
+        rumble_pending = false;
+        printf("# rumble_timer_callback: rumble_pending set to false \n");
         }
     }
+
+
+void ogx360_ctrl_special_action(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
+
+    if (ctrl_data->map_mask[0] & generic_btns_mask[PAD_MT]) {
+       // printf("MT button detected\n"); // Debug
+
+        if (ctrl_data->btns[0].value & generic_btns_mask[PAD_MT]) {
+           // printf("MT button pressed\n"); // Debug
+            if (!atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE)) {
+                atomic_set_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
+                //printf("Waiting for MT release\n"); // Debug
+            }
+        } 
+        else {
+            if (atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE)) {
+                atomic_clear_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
+                //printf("MT button released\n"); // Debug
+                //short rumble - active port number count  
+                trigger_special_rumble(ctrl_data->index, ctrl_data->index + 1);
+                //printf("MT pressed once, rumble activated\n"); // Debug
+            }
 }
+    }
+} 
+  
+
+
+
 
 void ogx360_ctrl_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {    
       // Ensure wired_data and wired_data->output are not NULL
