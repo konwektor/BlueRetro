@@ -4,7 +4,7 @@
 #include "adapter/config.h"
 #include <stdint.h>
 #include <stdbool.h>
-extern bool rumble_pending;
+extern bool rumble_pending[4];
 
 void ogx360_acc_toggle_fb(uint32_t wired_id, uint32_t duration_us, uint16_t left_motor, uint16_t right_motor);
 void ogx360_meta_init(struct wired_ctrl *ctrl_data);
