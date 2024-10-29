@@ -234,6 +234,10 @@ uint32_t adapter_get_out_mask(uint8_t dev_id) {
     return adapter_out_mask[dev_id];
 }
 
+uint32_t adapter_get_out_mask(uint8_t dev_id) {
+    return adapter_out_mask[dev_id];
+}
+
 int32_t btn_id_to_axis(uint8_t btn_id) {
     switch (btn_id) {
         case PAD_LX_LEFT:

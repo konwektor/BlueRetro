@@ -238,6 +238,22 @@ static void ps4_fb_from_generic(struct generic_fb *fb_data, struct bt_data *bt_d
         case FB_TYPE_PLAYER_LED:
             set_conf->leds = hw_config.ps_ctrl_colors[bt_data->base.pids->out_idx];
             break;
+   /* memset((void *)set_conf, 0, sizeof(*set_conf));
+    set_conf->conf0 = 0xc4;
+    set_conf->conf1 = 0x03;
+    set_conf->leds = hw_config.ps_ctrl_colors[bt_data->base.pids->id];
+
+    if (fb_data->state) {
+          if (fb_data->left_motor || fb_data->right_motor)
+        {
+            set_conf->r_rumble = fb_data->right_motor ;//>> 24;
+            set_conf->l_rumble = fb_data->left_motor ;//>> 24;
+        }
+        else
+        {
+            set_conf->r_rumble = 0x7F;
+            set_conf->l_rumble = 0x7F;
+        }*/
     }
 }
 
@@ -258,6 +274,21 @@ static void ps5_fb_from_generic(struct generic_fb *fb_data, struct bt_data *bt_d
         case FB_TYPE_PLAYER_LED:
             set_conf->leds = hw_config.ps_ctrl_colors[bt_data->base.pids->out_idx];
             break;
+  /*  memset((void *)set_conf, 0, sizeof(*set_conf));
+
+    set_conf->conf0 = 0x02;
+    if (fb_data->state) {
+        set_conf->cmd = 0x03;
+          if (fb_data->left_motor || fb_data->right_motor)
+        {
+            set_conf->r_rumble = fb_data->right_motor; //>> 24;
+            set_conf->l_rumble = fb_data->left_motor ;//>> 24;
+        }
+        else
+        {
+        set_conf->r_rumble = 0x3F;
+        set_conf->l_rumble = 0x3F;
+        }*/
     }
 }
 
