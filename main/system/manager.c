@@ -164,6 +164,33 @@ static inline uint32_t get_port_led_pin(uint32_t index) {
 
 static void internal_flag_init(void) {
 #ifdef CONFIG_BLUERETRO_HW2
+       #ifdef CONFIG_BLUERETRO_SYSTEM_OGX360
+        hw_config.external_adapter = 0;  // always internal adapter for hw2 and ogx360 
+    #else
+        if (hw_config.power_pin_polarity) {
+            if (!gpio_get_level(POWER_ON_PIN) && gpio_get_level(RESET_PIN)) {
+                hw_config.external_adapter = 1;
+            }
+        } else {
+            if (gpio_get_level(POWER_ON_PIN) && gpio_get_level(RESET_PIN)) {
+                hw_config.external_adapter = 1;
+            }
+        }
+    #endif
+#else
+    hw_config.external_adapter = 1;
+#endif
+
+    if (hw_config.external_adapter) {
+        printf("# %s: External adapter\n", __FUNCTION__);
+    } else {
+        printf("# %s: Internal adapter\n", __FUNCTION__);
+    }
+}
+
+
+/*static void internal_flag_init(void) {
+#ifdef CONFIG_BLUERETRO_HW2
     if (hw_config.power_pin_polarity) {
         if (!gpio_get_level(POWER_ON_PIN) && gpio_get_level(RESET_PIN)) {
             hw_config.external_adapter = 1;
@@ -183,7 +210,7 @@ static void internal_flag_init(void) {
     else {
         printf("# %s: Internal adapter\n", __FUNCTION__);
     }
-}
+}*/
 
 static void port_led_pulse(uint32_t pin) {
     if (pin) {
@@ -491,6 +518,26 @@ static void sys_mgr_power_on(void) {
 
 static void sys_mgr_power_off(void) {
     bt_host_disconnect_all();
+
+#ifdef CONFIG_BLUERETRO_HW2
+    #ifdef CONFIG_BLUERETRO_SYSTEM_OGX360
+    //logic for hw2 and ogx360
+        set_power_on(1);  //power_pin_polarity = 1 so "set_power_on(1)" makes oposite state on pin 
+        vTaskDelay(hw_config.power_pin_pulse_ms / portTICK_PERIOD_MS);  
+        set_power_on(0);  
+    #else  // Logic for HW2 only without OGX360
+        if (hw_config.power_pin_is_hold) {
+            set_power_on(0);
+        } else {
+            set_power_off(1);
+            vTaskDelay(hw_config.power_pin_pulse_ms / portTICK_PERIOD_MS);
+            set_power_off(0);
+        }
+    #endif
+#endif
+}
+/*static void sys_mgr_power_off(void) {
+    bt_host_disconnect_all();
 #ifdef CONFIG_BLUERETRO_HW2
     if (hw_config.power_pin_is_hold) {
         set_power_on(0);
@@ -501,7 +548,7 @@ static void sys_mgr_power_off(void) {
         set_power_off(0);
     }
 #endif
-}
+}*/
 
 static int32_t sys_mgr_get_power(void) {
 #ifdef CONFIG_BLUERETRO_SYSTEM_UNIVERSAL
@@ -639,6 +686,13 @@ void sys_mgr_init(uint32_t package) {
             hw_config.port_cnt = 4;
             break;
 		case OGX360:
+            hw_config.power_pin_pulse_ms = 40,
+            hw_config.port_cnt = 4;
+            hw_config.power_pin_polarity = 1;
+            hw_config.hotplug = 1;
+            hw_config.power_pin_od = 1;
+            hw_config.reset_pin_od = 1;
+            break;
         case DC:
         case GC:
             hw_config.port_cnt = 4;

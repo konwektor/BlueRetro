@@ -187,7 +187,7 @@ void ogx360_acc_toggle_fb(uint32_t wired_id, uint32_t duration_us, uint16_t left
         return;
     }
 
-    bt_host_get_dev_from_out_idx(wired_id, &device);
+   bt_host_get_active_dev_from_out_idx(wired_id, &device);
     if (device) {
         //printf("# ogx360_acc_toggle_fb: Device found\n");
         bt_data = &bt_adapter.data[device->ids.id];
