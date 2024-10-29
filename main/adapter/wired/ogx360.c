@@ -182,12 +182,12 @@ void ogx360_meta_init(struct wired_ctrl *ctrl_data) {
 void ogx360_acc_toggle_fb(uint32_t wired_id, uint32_t duration_us, uint16_t left_motor, uint16_t right_motor) {
     struct bt_dev *device = NULL;
     struct bt_data *bt_data = NULL;
-    //printf("# ogx360_toggle_fb: wired_id=%lu, duration=%lu, left=%u, right=%u\n", wired_id, duration_us, left_motor, right_motor);
+    printf("# ogx360_toggle_fb: wired_id=%lu, duration=%lu, left=%u, right=%u\n", wired_id, duration_us, left_motor, right_motor);
      if (rumble_pending[wired_id] && duration_us == 0) {
         return;
     }
 
-    bt_host_get_dev_from_out_idx(wired_id, &device);
+   bt_host_get_active_dev_from_out_idx(wired_id, &device);
     if (device) {
         //printf("# ogx360_acc_toggle_fb: Device found\n");
         bt_data = &bt_adapter.data[device->ids.id];
@@ -296,7 +296,7 @@ printf("# rumble_timer_callback: Stopping rumble for wired port index %lu \n", w
             rumble_timer[wired_index] = NULL;
         }
 
-        // Create new timer fot his port
+        // Create new timer for this port
         esp_timer_create_args_t timer_args = {
             .callback = &rumble_timer_callback,
             .arg = (void*)(uintptr_t)wired_index,
