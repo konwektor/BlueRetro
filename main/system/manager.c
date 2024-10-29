@@ -285,7 +285,7 @@ static void wired_port_hdl(void) {
             idx++;
         }
 
-        // Sprawdzenie, czy urządzenie BT jest gotowe
+        // Check if BT_device is ready 
         bt_ready = atomic_test_bit(&device->flags, BT_DEV_HID_INIT_DONE);
 
 #ifdef CONFIG_BLUERETRO_HW2
