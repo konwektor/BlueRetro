@@ -89,6 +89,7 @@ enum {
     PARALLEL_1P_OD,
     PARALLEL_2P_OD,
     SEA_BOARD,
+    OGX360,
     WIRED_MAX,
 };
 
@@ -559,6 +560,9 @@ struct bt_adapter {
     struct bt_data data[BT_MAX_DEV];
 };
 
+
+
+
 typedef int32_t (*to_generic_t)(struct bt_data *bt_data, struct wireless_ctrl *ctrl_data);
 typedef void (*from_generic_t)(int32_t dev_mode, struct wired_ctrl *ctrl_data, struct wired_data *wired_data);
 typedef void (*fb_to_generic_t)(int32_t dev_mode, struct raw_fb *raw_fb_data, struct generic_fb *fb_data);
@@ -583,6 +587,7 @@ void adapter_fb_stop_timer_start(uint8_t dev_id, uint64_t dur_us);
 void adapter_fb_stop_timer_stop(uint8_t dev_id);
 uint32_t adapter_bridge_fb(struct raw_fb *fb_data, struct bt_data *bt_data);
 void adapter_q_fb(struct raw_fb *fb_data);
+void start_rumble_sequence(uint32_t wired_id, uint32_t duration_us, int repeat_count);
 void adapter_toggle_fb(uint32_t wired_id, uint32_t duration_us);
 void adapter_init(void);
 void adapter_meta_init(void);
