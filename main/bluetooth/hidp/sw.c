@@ -83,21 +83,7 @@ void bt_hid_cmd_sw_set_conf(struct bt_dev *device, void *report) {
     sw_conf->tid = device->tid++;
     sw_conf->tid &= 0xF;
 
-    /* Reset keepalive since this serve as one & also avoid rumble disruption */
-    esp_timer_restart(device->timer_hdl, KEEPALIVE_PERIOD_US);
-
     bt_hid_cmd(device->acl_handle, device->intr_chan.dcid, BT_HIDP_DATA_OUT, BT_HIDP_SW_SET_CONF, sizeof(*sw_conf));
-}
-
-void bt_hid_cmd_sw_send_keep_alive(struct bt_dev *device) {
-    struct bt_hidp_sw_rumble *sw_rumble = (struct bt_hidp_sw_rumble *)bt_hci_pkt_tmp.hidp_data;
-
-    sw_rumble->tid = device->tid++;
-    sw_rumble->tid &= 0xF;
-    sw_rumble->rumble32[0] = BT_HIDP_SW_RUMBLE_IDLE;
-    sw_rumble->rumble32[1] = BT_HIDP_SW_RUMBLE_IDLE;
-
-    bt_hid_cmd(device->acl_handle, device->intr_chan.dcid, BT_HIDP_DATA_OUT, BT_HIDP_SW_SET_RUMBLE, sizeof(*sw_rumble));
 }
 
 void bt_hid_sw_get_calib(int32_t dev_id, struct bt_hid_sw_ctrl_calib **cal) {
