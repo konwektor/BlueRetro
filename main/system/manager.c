@@ -189,29 +189,6 @@ static void internal_flag_init(void) {
 }
 
 
-/*static void internal_flag_init(void) {
-#ifdef CONFIG_BLUERETRO_HW2
-    if (hw_config.power_pin_polarity) {
-        if (!gpio_get_level(POWER_ON_PIN) && gpio_get_level(RESET_PIN)) {
-            hw_config.external_adapter = 1;
-        }
-    }
-    else {
-        if (gpio_get_level(POWER_ON_PIN) && gpio_get_level(RESET_PIN)) {
-            hw_config.external_adapter = 1;
-        }
-    }
-#else
-    hw_config.external_adapter = 1;
-#endif
-    if (hw_config.external_adapter) {
-        printf("# %s: External adapter\n", __FUNCTION__);
-    }
-    else {
-        printf("# %s: Internal adapter\n", __FUNCTION__);
-    }
-}*/
-
 static void port_led_pulse(uint32_t pin) {
     if (pin) {
         gpio_hal_iomux_func_sel(GPIO_PIN_MUX_REG[pin], PIN_FUNC_GPIO);
@@ -536,19 +513,6 @@ static void sys_mgr_power_off(void) {
     #endif
 #endif
 }
-/*static void sys_mgr_power_off(void) {
-    bt_host_disconnect_all();
-#ifdef CONFIG_BLUERETRO_HW2
-    if (hw_config.power_pin_is_hold) {
-        set_power_on(0);
-    }
-    else {
-        set_power_off(1);
-        vTaskDelay(hw_config.power_pin_pulse_ms / portTICK_PERIOD_MS);
-        set_power_off(0);
-    }
-#endif
-}*/
 
 static int32_t sys_mgr_get_power(void) {
 #ifdef CONFIG_BLUERETRO_SYSTEM_UNIVERSAL

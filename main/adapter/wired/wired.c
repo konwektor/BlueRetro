@@ -80,8 +80,7 @@ static fb_to_generic_t fb_to_generic_func[WIRED_MAX] = {
     NULL, /* PARALLEL_1P_OD */
     NULL, /* PARALLEL_2P_OD */
     NULL, /* SEA_BOARD */
-    NULL, /* OGX360 */
-    //ogx360_fb_to_generic, /* OGX360 */
+    ogx360_fb_to_generic, /* OGX360 */
 };
 
 static meta_init_t meta_init_func[WIRED_MAX] = {

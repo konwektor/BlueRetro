@@ -234,9 +234,6 @@ uint32_t adapter_get_out_mask(uint8_t dev_id) {
     return adapter_out_mask[dev_id];
 }
 
-uint32_t adapter_get_out_mask(uint8_t dev_id) {
-    return adapter_out_mask[dev_id];
-}
 
 int32_t btn_id_to_axis(uint8_t btn_id) {
     switch (btn_id) {
@@ -508,6 +505,55 @@ void IRAM_ATTR adapter_q_fb(struct raw_fb *fb_data) {
         queue_bss_enqueue(wired_adapter.input_q_hdl, (uint8_t *)fb_data, sizeof(*fb_data));
     }
 }
+
+typedef struct {
+    uint8_t repeat_count;
+    uint8_t current_cycle;
+    uint8_t wired_id;
+    uint32_t duration_us;
+    esp_timer_handle_t sequence_timer_handle;
+} sequence_data_t;
+
+sequence_data_t sequence_data_array[WIRED_MAX_DEV];
+
+
+
+// Callback dla sequence_timer - wywołuje adapter_toggle_fb dla pojedynczego cyklu i aktualizuje licznik
+ void sequence_rumble_callback(void *arg) {
+    uint32_t wired_id = (uint32_t)(uintptr_t)arg;
+    sequence_data_t *sequence_data = &sequence_data_array[wired_id];
+
+    if (sequence_data->current_cycle < sequence_data->repeat_count) {
+        adapter_toggle_fb(wired_id, 300000);  // Wywołanie rumble na 300 ms
+        sequence_data->current_cycle++;
+
+        esp_timer_start_once(sequence_data->sequence_timer_handle, sequence_data->duration_us);
+    } else {
+        esp_timer_delete(sequence_data->sequence_timer_handle);
+        sequence_data->sequence_timer_handle = NULL;
+    }
+}
+
+
+void start_rumble_sequence(uint32_t wired_id, uint32_t duration_us, int repeat_count) {
+    sequence_data_t *sequence_data = &sequence_data_array[wired_id];
+    sequence_data->repeat_count = repeat_count;
+    sequence_data->current_cycle = 0;
+    sequence_data->wired_id = wired_id;
+    sequence_data->duration_us = duration_us;
+
+    const esp_timer_create_args_t sequence_timer_args = {
+        .callback = &sequence_rumble_callback,
+        .arg = (void *)(uintptr_t)wired_id,
+        .name = "sequence_timer"
+    };
+
+    esp_timer_create(&sequence_timer_args, &sequence_data->sequence_timer_handle);
+    esp_timer_start_once(sequence_data->sequence_timer_handle, duration_us);
+}
+
+
+
 
 void adapter_toggle_fb(uint32_t wired_id, uint32_t duration_us) {
     struct bt_dev *device = NULL;

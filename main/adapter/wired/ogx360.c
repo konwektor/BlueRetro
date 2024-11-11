@@ -4,23 +4,17 @@
 #include <esp_timer.h>
 #include "bluetooth/host.h"
 #include "adapter/wireless/wireless.h"
-#include "wired/ogx360_i2c.h" // Hack
+#include "wired/ogx360_i2c.h" 
 #include <esp32/rom/ets_sys.h>
 #include "zephyr/types.h"
 #include "tools/util.h"
+#include "adapter/adapter.h"
 #include "adapter/config.h"
 #include "adapter/kb_monitor.h"
 #include "adapter/wired/wired.h"
+#include "adapter/wireless/wireless.h"
 #include "ogx360.h"
 
-
-//Arrays for rumble special function
-void trigger_special_rumble(int wired_index, int repetitions);
-static int current_repetition[4] = {0, 0, 0, 0};
-static int total_repetitions[4] = {0, 0, 0, 0};
-bool rumble_pending[4] = {false, false, false, false};
-static esp_timer_handle_t rumble_timer[4] = {NULL, NULL, NULL, NULL};  // Separate timer for every port
-void rumble_timer_callback(void* arg);
 //#define BIT(x) (1<<x)
 
 #define BUTTON_MASK_SIZE 32
@@ -179,180 +173,30 @@ void ogx360_meta_init(struct wired_ctrl *ctrl_data) {
     }
 }
 
-void ogx360_acc_toggle_fb(uint32_t wired_id, uint32_t duration_us, uint16_t left_motor, uint16_t right_motor) {
-    struct bt_dev *device = NULL;
-    struct bt_data *bt_data = NULL;
-    //printf("# ogx360_toggle_fb: wired_id=%lu, duration=%lu, left=%u, right=%u\n", wired_id, duration_us, left_motor, right_motor);
-     if (rumble_pending[wired_id] && duration_us == 0) {
-        return;
-    }
+void ogx360_ctrl_special_action(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
 
-   bt_host_get_active_dev_from_out_idx(wired_id, &device);
-    if (device) {
-        //printf("# ogx360_acc_toggle_fb: Device found\n");
-        bt_data = &bt_adapter.data[device->ids.id];
-        if (bt_data) {
-           // printf("# ogx360_toggle_fb: bt_data found\n");
-            struct generic_fb fb_data = {0};
+    if (ctrl_data->map_mask[0] & generic_btns_mask[PAD_MT]) {
+    // printf("MT button detected\n"); // Debug
 
-            fb_data.wired_id = wired_id;
-            fb_data.type = FB_TYPE_RUMBLE;
-            fb_data.cycles = 0;
-            fb_data.start = 0;
-            fb_data.state = (left_motor || right_motor);
-            fb_data.left_motor = left_motor;    
-            fb_data.right_motor = right_motor;  
-
-            if (duration_us > 0) { //start with timer for definied time
-                adapter_fb_stop_timer_start(wired_id, duration_us);
+        if (ctrl_data->btns[0].value & generic_btns_mask[PAD_MT]) {
+         //printf("MT button pressed\n"); // for Debug - to be sure if its working
+            if (!atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE)) {
+                atomic_set_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
+               // printf("Waiting for MT release\n"); // Debug to see if pushed and holded button is really recognized 
             }
-            //without timer just proceed with data  
-            wireless_fb_from_generic(&fb_data, bt_data);
-           // printf("# ogx360_acc_toggle_fb: Sending feedback\n");
-            bt_hid_feedback(device, bt_data->base.output);
-        } else {
-            printf("# ogx360_acc_toggle_fb: bt_data not found\n");
+        } 
+        else {
+            if (atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE)) {
+                atomic_clear_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
+               // printf("MT button released\n"); // Debug
+                //short rumble - call rumble for n-times loops - port number count  
+                int repeat_count = wired_data->index + 1;  // Określ liczbę cykli
+                start_rumble_sequence(ctrl_data->index, 500000, repeat_count);
+              //  printf(" rumble activated\n"); // Debug
+            }
         }
-    } else {
-        printf("# ogx360_acc_toggle_fb: Device not found\n");
     }
 }
-/*
-void trigger_special_rumble(int wired_index, int repetitions) {
-  //  static int current_repetition = 0;
-    //static int total_repetitions = 0;
-
-    if (current_repetition == 0) {
-        // Rozpoczynamy nową sekwencję wibracji
-        total_repetitions = repetitions;
-        current_repetition = 1;
-        } else {
-        current_repetition++;
-    }
-
-                rumble_pending = true;
-    printf("# trigger_special_rumble: rumble_pending set to true for wired index %d (repetition %d/%d)\n", 
-           wired_index, current_repetition, total_repetitions);
-                
-    // Uruchom wibracje na 550ms z pełną mocą obu silników
-    ogx360_acc_toggle_fb(wired_index, 400000, 0xFFFF, 0xFFFF);     
-                
-                // Delete existing timer if it exists
-                if (rumble_timer != NULL) {
-                    esp_timer_delete(rumble_timer);
-                    rumble_timer = NULL;
-                }
-
-                // Create a new timer
-                esp_timer_create_args_t timer_args = {
-                    .callback = &rumble_timer_callback,
-                    .arg = (void*)(uintptr_t)wired_index,
-                    .name = "rumble_timer"
-                };
-                esp_timer_create(&timer_args, &rumble_timer);
-                
-    // Uruchom timer na 650ms
-    esp_timer_start_once(rumble_timer, 650000);
-} 
-
-void rumble_timer_callback(void* arg) {
-    uint32_t wired_index = (uint32_t)(uintptr_t)arg;
-printf("# rumble_timer_callback: Stopping rumble for wired port index %lu \n", wired_index);
-    ogx360_acc_toggle_fb(wired_index, 0, 0, 0);  // Zatrzymaj wibracje
-
-    if (current_repetition < total_repetitions) {
-        // Jeśli nie ma jeszcze wymaganej liczby powtórzeń, wywołaj ponownie trigger_special_rumble
-        trigger_special_rumble(wired_index, 0);  // 0 jako drugi argument, aby kontynuować sekwencję
-    } else {
-        //wymaganą liczba powtórzeń osiagnieta, resetujemy liczniki i flagę
-        current_repetition = 0;
-        total_repetitions = 0;
-        rumble_pending = false;
-        printf("# rumble_timer_callback: rumble_pending for port index %lu set to false \n", wired_index);
-        }
-    }
-    */
-
-
-    void trigger_special_rumble(int wired_index, int repetitions) {
-        if (current_repetition[wired_index] == 0) {
-            // begin new rumble rumble sequence
-            total_repetitions[wired_index] = repetitions;
-            current_repetition[wired_index] = 1;
-        } else {
-            current_repetition[wired_index]++;
-        }
-
-        rumble_pending[wired_index] = true;
-        printf("# trigger_special_rumble: rumble_pending set to true for wired index %d (repetition %d/%d)\n",
-        wired_index, current_repetition[wired_index], total_repetitions[wired_index]);
-
-        // Start rumble for 400ms and ful power on both motors
-        ogx360_acc_toggle_fb(wired_index, 400000, 0xFFFF, 0xFFFF);     
-
-        // Remove timer for this port if exist any
-        if (rumble_timer[wired_index] != NULL) {
-            esp_timer_delete(rumble_timer[wired_index]);
-            rumble_timer[wired_index] = NULL;
-        }
-
-        // Create new timer fot his port
-        esp_timer_create_args_t timer_args = {
-            .callback = &rumble_timer_callback,
-            .arg = (void*)(uintptr_t)wired_index,
-            .name = "rumble_timer"
-        };
-        esp_timer_create(&timer_args, &rumble_timer[wired_index]);
-
-        // Start timer for 650ms
-        esp_timer_start_once(rumble_timer[wired_index], 650000);
-    }
-
-    void rumble_timer_callback(void* arg) {
-        uint32_t wired_index = (uint32_t)(uintptr_t)arg;
-        printf("# rumble_timer_callback: Stopping rumble for wired port index %lu \n", wired_index);
-        ogx360_acc_toggle_fb(wired_index, 0, 0, 0);  // Rumble stop
-
-        if (current_repetition[wired_index] < total_repetitions[wired_index]) {
-            //Call again trigger_special_rumble until all n*total_repetitions are done
-            trigger_special_rumble(wired_index, 0);  // to continiue rumble loop call it with 0 parameter / dirty solution
-        } else {
-            // All loops done, reseting now counters and flag
-            current_repetition[wired_index] = 0;
-            total_repetitions[wired_index] = 0;
-            rumble_pending[wired_index] = false;
-            printf("# rumble_timer_callback: rumble_pending for port index %lu set to false \n", wired_index);
-        }
-    }
-
-
-    void ogx360_ctrl_special_action(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
-
-        if (ctrl_data->map_mask[0] & generic_btns_mask[PAD_MT]) {
-        // printf("MT button detected\n"); // Debug
-
-            if (ctrl_data->btns[0].value & generic_btns_mask[PAD_MT]) {
-            // printf("MT button pressed\n"); // for Debug - to be sure if its working
-                if (!atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE)) {
-                    atomic_set_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
-                    //printf("Waiting for MT release\n"); // Debug to see if pushed and holded button is really recognized 
-                }
-            } 
-            else {
-                if (atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE)) {
-                    atomic_clear_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
-                    //printf("MT button released\n"); // Debug
-                    //short rumble - call rumble for n-times loops - port number count  
-                    trigger_special_rumble(ctrl_data->index, ctrl_data->index + 1);
-                    //printf("MT pressed once, rumble activated\n"); // Debug
-                }
-    }
-        }
-    } 
-    
-
-
-
 
 void ogx360_ctrl_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {    
       // Ensure wired_data and wired_data->output are not NULL
@@ -436,7 +280,7 @@ void ogx360_from_generic(int32_t dev_mode, struct wired_ctrl *ctrl_data, struct 
     switch (dev_mode) {
         case DEV_KB:
         case DEV_MOUSE:
-            //...Future implementations for keyboard and mouse - not ready yet.
+        //...Future implementations for keyboard and mouse - not ready yet.
         case DEV_PAD:
         default:
             ogx360_ctrl_from_generic(ctrl_data, wired_data);
@@ -445,14 +289,25 @@ void ogx360_from_generic(int32_t dev_mode, struct wired_ctrl *ctrl_data, struct 
 }
 
 
+void ogx360_fb_to_generic(int32_t dev_mode, struct raw_fb *raw_fb_data, struct generic_fb *fb_data) {
 
-
- void ogx360_fb_to_generic(int32_t dev_mode, struct raw_fb *raw_fb_data, struct generic_fb *fb_data) {
     fb_data->wired_id = raw_fb_data->header.wired_id;
-        fb_data->type = raw_fb_data->header.type;
-    fb_data->state = raw_fb_data->data[0];
-    fb_data->cycles = 0;
-    fb_data->start = 0;
+    fb_data->type = raw_fb_data->header.type;
+    
+    // OGX360 HID Output Report format:
+    // byte 0: 0x00
+    // byte 1: 0x06 (size)
+    // bytes 2-3: Left actuator strength (16-bit)
+    // bytes 4-5: Right actuator strength (16-bit)
+    if (raw_fb_data->header.data_len == 0) {
+        fb_data->state = 0;
+        fb_data->lf_pwr = 0;
+        fb_data->hf_pwr = 0;
+    } else {
+        uint16_t left_strength = (raw_fb_data->data[3] << 8) | raw_fb_data->data[2];
+        uint16_t right_strength = (raw_fb_data->data[5] << 8) | raw_fb_data->data[4];
+        fb_data->state = (left_strength || right_strength) ? 1 : 0;
+        fb_data->lf_pwr = left_strength;
+        fb_data->hf_pwr = right_strength;
+    }
 }
-
-
