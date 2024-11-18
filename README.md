@@ -1,7 +1,35 @@
 
+BROgx 
 
+mix of [BlueRetro](https://github.com/darthcloud/BlueRetro) by DarthCloud and [OGX360](https://github.com/Ryzee119/ogx360) by Ryzee119
+Based on code and concept by netham45 https://github.com/netham45/BlueRetro
 This is a modified version of BlueRetro with support for sending commands to an OGX360 over I2C. 
-See https://github.com/konwektor/ogx360 for a compatible build of ogx360.
+
+Build from 2 parts
+- one ESP-WROOM-32 chip/ESP32-WROOM32d DevkitC V4. module 
+- max.4 ATMEGA32U4 / Arduino pro micro/leonardo 
+
+ESP32 allows connecting bluetooth gamepads, and with modified BlueRetro software sending data over i2c to Arduino
+Arduino is communicating with Xbox over usb, modification of OGX360 software removes master device and sets all as slaves
+
+Main features :
+- Using one esp32 module playing on Xbox completly wireless from player 1 til 4 (depends how much arduino modules are conected) 
+- Rumble support
+- Power XBOX ON/OFF with BT controller 
+
+HW2 internal/external features:
+- Port detection /in internal when wired controller is connected to gameport(USB) already occupied by BT controller, arduino is disconnecing from it to make place for wired, and BT controller jumps to next free gameport/ in external plug from BROgx not connected - port disabled
+- Port status LED
+- Global status LED
+- Power XBOX ON/OFF with BT controller /only in HW2 internal build under extra circumstances
+- Because xbox gamepads doesn`t have player slot/place feedback (colours or diodes), except xbox360 gamepads, but they are not supported by BROgx,
+  I have added small rumble feedback function - after succesfully connection, pushing XBOX button, or similar button in other controlller, will cause controller to rumble n-times, where n is the number of actually used port.
+
+  Info about adapter, programming and hardware build details in [Instructions](Instructions/README.md).
+
+
+
+
 <BR>
 
 v24.04 Latest
@@ -16,7 +44,7 @@ Based on BlueRetro v24.04
 This version need also updating arduino firmware in case of use hw2, use mine fork at https://github.com/konwektor/ogx360.
 hw1 doesn`t need arduino firmware update if You have used already ogx360 fork for BlueRetro support.
 
-Small detailed info in [!compiled](https://github.com/konwektor/BlueRetro/tree/master/!compiled).
+
 <br>
 This can be compiled the same as BlueRetro. <br>
 Copy /configs/hw1/ogx360 to Your /Blueretro/sdkconfig start esp-idf (v5.1.2) and rund "esp.py build".
