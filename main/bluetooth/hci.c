@@ -1123,7 +1123,10 @@ static void bt_hci_le_meta_evt_hdlr(struct bt_hci_pkt *bt_hci_evt_pkt) {
                             /* Manufacturer Specific Data */
                             value = *(uint16_t *)&data[1];
                             if (value == 0x0553) {
-                                goto connect;
+                                uint16_t vid = *(uint16_t *)&data[6];
+                                if (vid == 0x057e) {
+                                    goto connect;
+                                }
                             }
                             break;
                     }
