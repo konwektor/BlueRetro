@@ -1,5 +1,59 @@
  <p align="center"><a href="https://blueretro.com/products/brx"><img src="https://github.com/darthcloud/img/blob/main/brx_banner.png"/></a></p>
 
+update to 25.04
+
+This is a modified version of BlueRetro with support for sending commands to an OGX360 over I2C. 
+See https://github.com/konwektor/ogx360 for a compatible build of ogx360.
+<BR>
+
+v24.04 Latest
+
+Based on BlueRetro v24.04
+
+    Fixed rumble with i2c repeated start - gamepads are not hanging anymore for 1 sec - tested with wiiu and ps4
+    Added hw2 internal/external support
+    Added port detection in hw2
+    Added rubmle feedback for actually used port - push xbox button and gamepad will rumble shortly x-times , where x is port number used
+
+This version need also updating arduino firmware in case of use hw2, use mine fork at https://github.com/konwektor/ogx360.
+hw1 doesn`t need arduino firmware update if You have used already ogx360 fork for BlueRetro support.
+
+Small detailed info in [!compiled](https://github.com/konwektor/BlueRetro/tree/master/!compiled).
+<br>
+This can be compiled the same as BlueRetro. <br>
+Copy /configs/hw1/ogx360 to Your /Blueretro/sdkconfig start esp-idf (v5.1.2) and rund "esp.py build".
+
+Or just go to [Releases](https://github.com/konwektor/BlueRetro/releases), and download already compiled files.
+<BR>
+# Need help? Found Bug? Any Ideas?
+* [Open a GitHub discussion](https://github.com/konwektor/BlueRetro/discussions)
+
+<BR>
+
+
+
+- All Xbox one x/s series x/s controllers working with rumble, no delay no stuck.
+- Wiiu pro rumble tested and working
+- Ps4 rumble tested and working
+
+- All other bluetooth gamepads supported by Blueretro should work - not tested - got any???? Give me feedback.
+
+<BR>
+
+
+<BR>
+ 
+ - look to [Davidxgames](https://github.com/davidxgames) or [XGAMES VIDEOJUEGOS](https://www.youtube.com/@XGAMESVIDEOJUEGOS),  - video how to do mod, assembly instruction and compiled files ready to go  (based o BlueRetro 1.8.x I think) -channel in spanish.
+
+    Respect and many BIG Thanks goes to Ervin: [Eolvera85](https://github.com/eolvera85):- author of PS5 support patch.
+
+
+
+<BR>
+
+ 
+    
+
 # BlueRetro
 
 <p align="center"><img src="/static/PNGs/BRE_Logo_Color_Outline.png" width="600"/></p>

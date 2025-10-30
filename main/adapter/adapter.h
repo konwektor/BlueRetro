@@ -85,6 +85,7 @@ enum {
     PARALLEL_1P_OD,
     PARALLEL_2P_OD,
     SEA_BOARD,
+	OGX360,
     WIRED_MAX,
 };
 
@@ -557,6 +558,18 @@ struct wired_adapter {
     struct wired_data data[WIRED_MAX_DEV];
 };
 
+struct sequence_data {
+    void *sequence_timer_handle;
+    uint8_t repeat_count;
+    uint8_t current_cycle;
+    uint32_t duration_us;
+    bool is_active;
+};
+
+struct sequence {
+    struct sequence_data array[WIRED_MAX_DEV];
+};
+
 struct bt_adapter {
     struct bt_data data[BT_MAX_DEV];
 };
@@ -585,6 +598,7 @@ void adapter_fb_stop_timer_start(uint8_t dev_id, uint64_t dur_us);
 void adapter_fb_stop_timer_stop(uint8_t dev_id);
 uint32_t adapter_bridge_fb(struct raw_fb *fb_data, struct bt_data *bt_data);
 void adapter_q_fb(struct raw_fb *fb_data);
+void start_rumble_sequence(uint32_t wired_id, uint32_t duration_us, int repeat_count);
 void adapter_toggle_fb(uint32_t wired_id, uint32_t duration_us, uint8_t lf_pwr, uint8_t hf_pwr);
 void adapter_init(void);
 void adapter_meta_init(void);

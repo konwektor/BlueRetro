@@ -495,14 +495,20 @@ static void sys_mgr_power_on(void) {
 static void sys_mgr_power_off(void) {
     bt_host_disconnect_all();
 #ifdef CONFIG_BLUERETRO_HW2
-    if (hw_config.power_pin_is_hold) {
-        set_power_on(0);
-    }
-    else {
-        set_power_off(1);
-        vTaskDelay(hw_config.power_pin_pulse_ms / portTICK_PERIOD_MS);
-        set_power_off(0);
-    }
+    #ifdef CONFIG_BLUERETRO_SYSTEM_OGX360
+    //logic for hw2 and ogx360
+        set_power_on(1); 
+        vTaskDelay(hw_config.power_pin_pulse_ms / portTICK_PERIOD_MS);  
+        set_power_on(0);  
+    #else  // Logic for HW2 only without OGX360
+        if (hw_config.power_pin_is_hold) {
+            set_power_on(0);
+        } else {
+            set_power_off(1);
+            vTaskDelay(hw_config.power_pin_pulse_ms / portTICK_PERIOD_MS);
+            set_power_off(0);
+        }
+    #endif
 #endif
 }
 
@@ -641,6 +647,15 @@ void sys_mgr_init(uint32_t package) {
         case N64:
             hw_config.port_cnt = 4;
             break;
+		case OGX360:
+            hw_config.power_pin_pulse_ms = 40,
+            hw_config.port_cnt = 4;
+            hw_config.power_pin_polarity = 0;
+            hw_config.hotplug = 1;
+            hw_config.power_pin_od = 0;//hardware redesign/ before OD=1 causing current leak from xbox 3.3_STBY thru unpowered ESP32 clamping diodes on GPIO`S - killing thing for chip 
+            hw_config.reset_pin_od = 0;//hardware redesign/before OD=1, now 0 for HW2-INTERNALL with N-MOSFETTS /no need for pullup /fixin xbox self on after power loss/fix problem getting esp32 in download mode thru xbox pwr/xbox dvd buttons
+            hw_config.reset_pin_polarity = 1;// we set reset_pin LOW, together with pin_polarity = 1 /all what we need for ogxbox/ no need to do/add any other changes in manager code
+            break;
         case DC:
         case GC:
             hw_config.port_cnt = 4;
@@ -732,7 +747,11 @@ void sys_mgr_init(uint32_t package) {
     io_conf.pin_bit_mask = 1ULL << power_off_pin;
     gpio_config(&io_conf);
 
+    #ifdef CONFIG_BLUERETRO_SYSTEM_OGX360
+    gpio_set_level(RESET_PIN, 0);
+    #else
     gpio_set_level(RESET_PIN, 1);
+    #endif
     if (hw_config.reset_pin_od) {
         io_conf.mode = GPIO_MODE_OUTPUT_OD;
     }

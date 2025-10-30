@@ -85,6 +85,8 @@ static void wl_init_task(void *arg) {
     esp_ota_get_state_partition(running, &ota_state);
 
     chip_package = esp_efuse_get_pkg_ver();
+        printf("Chip package: %lu\n", chip_package);
+
 
 #ifdef CONFIG_BLUERETRO_COVERAGE
     cov_init();

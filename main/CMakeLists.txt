@@ -23,6 +23,7 @@ set(cov_srcs
     "adapter/wired/ps.c"
     "adapter/wired/sea.c"
     "adapter/wired/wii.c"
+    "adapter/wired/ogx360.c"
     "adapter/wired/parallel_1p.c"
     "adapter/wired/parallel_2p.c"
     "adapter/wired/wired.c"
@@ -83,6 +84,7 @@ set(srcs
     "wired/jag_io.c"
     "wired/sea_io.c"
     "wired/wii_i2c.c"
+    "wired/ogx360_i2c.c"
     "zephyr/atomic.S"
 )
 
