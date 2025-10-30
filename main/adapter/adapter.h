@@ -91,7 +91,7 @@ enum {
     PARALLEL_1P_OD,
     PARALLEL_2P_OD,
     SEA_BOARD,
-    OGX360,
+    GX360,
     WIRED_MAX,
 };
 
@@ -562,6 +562,18 @@ struct wired_adapter {
     int32_t driver_mode;
     /* Bi-directional */
     struct wired_data data[WIRED_MAX_DEV];
+};
+
+struct sequence_data {
+    void *sequence_timer_handle;
+    uint8_t repeat_count;
+    uint8_t current_cycle;
+    uint32_t duration_us;
+    bool is_active;
+};
+
+struct sequence {
+    struct sequence_data array[WIRED_MAX_DEV];
 };
 
 struct bt_adapter {

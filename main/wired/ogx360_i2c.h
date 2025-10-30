@@ -3,11 +3,16 @@
 #include <stdint.h>
 
 #define OGX360_I2C_PORT_MAX 4
+void ogx360_i2c_ping1(uint8_t player);
+void ogx360_i2c_disconnectPacket1(uint8_t player);
+void ogx360_i2c_disconnect_ll(void);
+void ogx360_i2c_ping_ll(void);
 void ogx360_initialize_i2c(void);
 void ogx360_pingSlaves();
 void ogx360_i2c_init(uint32_t package);
 void ogx360_i2c_port_cfg(uint16_t mask);
 void ogx360_process(uint8_t player);
+void ogx360_ll_process(uint8_t player);
 
 #endif /* _OGX360_I2C_H_ */
 

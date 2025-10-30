@@ -45,8 +45,9 @@ struct wired_ctrl *ctrl_output;
 struct generic_fb fb_input;
 struct bt_adapter bt_adapter = {0};
 struct wired_adapter wired_adapter = {0};
+struct sequence sequence = {0};
 static uint32_t adapter_out_mask[WIRED_MAX_DEV] = {0};
-static bool rumble_mute = false;
+static bool rumble_mute = false;    //move or not? to wired_data struct - adapter_toggle_fb sets rumble_mute for itself not global for all dev.
 
 static uint32_t btn_id_to_btn_idx(uint8_t btn_id) {
     if (btn_id < 32) {
@@ -492,6 +493,84 @@ void IRAM_ATTR adapter_q_fb(struct raw_fb *fb_data) {
     }
 }
 
+void sequence_rumble_callback(void *arg) {
+    uint8_t wired_id = (uint8_t)(uintptr_t)arg;
+
+    if (wired_id >= WIRED_MAX_DEV)
+    return;
+
+    if (!sequence.array[wired_id].is_active) {
+        return;
+    }
+    
+
+    if (sequence.array[wired_id].current_cycle < sequence.array[wired_id].repeat_count) {
+        // Wywo�aj rumble z zapisanym czasem trwania
+        adapter_toggle_fb(wired_id, sequence.array[wired_id].duration_us, 0xFF, 0xFF);
+        sequence.array[wired_id].current_cycle++;
+        
+        // Ustaw timer na kolejny cykl (czas rumble + przerwa)
+        esp_timer_start_once(sequence.array[wired_id].sequence_timer_handle, 
+                            sequence.array[wired_id].duration_us + 350000);
+    } else {
+         // Zako�cz sekwencj�
+        //esp_timer_stop(sequence.array[wired_id].sequence_timer_handle); //just to be sure, in theory expired esp_timer_start_once stops itself  
+        esp_timer_delete(sequence.array[wired_id].sequence_timer_handle);
+        sequence.array[wired_id].sequence_timer_handle = NULL;
+        sequence.array[wired_id].is_active = false;
+    }
+}
+
+void stop_rumble_sequence(uint8_t wired_id) {
+    if (wired_id >= WIRED_MAX_DEV) return;
+    
+    if (sequence.array[wired_id].sequence_timer_handle) {
+        esp_timer_stop(sequence.array[wired_id].sequence_timer_handle);
+        esp_timer_delete(sequence.array[wired_id].sequence_timer_handle);
+        sequence.array[wired_id].sequence_timer_handle = NULL;
+        sequence.array[wired_id].is_active = false;
+    }
+    // Dodatkowo wy��cz rumble dla tego urz�dzenia
+    struct raw_fb fb_data = {0};
+    fb_data.header.wired_id = wired_id;
+    fb_data.header.type = FB_TYPE_RUMBLE;
+    fb_data.header.data_len = 0; // Wy��cz rumble
+    adapter_q_fb(&fb_data);
+}
+
+void start_rumble_sequence(uint32_t wired_id, uint32_t duration_us, int repeat_count) {
+    if (wired_id >= WIRED_MAX_DEV) return;
+
+    if (sequence.array[wired_id].is_active) {
+        return;
+    }
+    // Zatrzymaj istniej�c� sekwencj� dla tego urz�dzenia
+    //stop_rumble_sequence(wired_id);
+  
+    
+    // Inicjalizuj now� sekwencj�
+    sequence.array[wired_id].repeat_count = repeat_count;
+    sequence.array[wired_id].current_cycle = 0;
+    sequence.array[wired_id].duration_us = duration_us;
+    sequence.array[wired_id].is_active = true;
+    
+    const esp_timer_create_args_t sequence_timer_args = {
+        .callback = sequence_rumble_callback,
+        .arg = (void*)(uintptr_t)wired_id,
+        .name = "sequence_timer"
+    };    
+    
+    if (esp_timer_create(&sequence_timer_args, (esp_timer_handle_t *)&sequence.array[wired_id].sequence_timer_handle) == ESP_OK) {       
+        sequence_rumble_callback((void*)(uintptr_t)wired_id);
+    } else {
+        sequence.array[wired_id].is_active = false;
+        //todo
+    }
+}
+
+
+
+/*
 typedef struct {
     uint8_t repeat_count;
     uint8_t current_cycle;
@@ -539,6 +618,7 @@ void start_rumble_sequence(uint32_t wired_id, uint32_t duration_us, int repeat_c
 }
 
 
+    */
 
 
 
