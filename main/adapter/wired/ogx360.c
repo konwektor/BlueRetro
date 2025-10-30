@@ -15,7 +15,6 @@
 #include "adapter/wireless/wireless.h"
 #include "ogx360.h"
 
-//#define BIT(x) (1<<x)
 
 #define BUTTON_MASK_SIZE 32
 #define NUM_DIGITAL_BUTTONS 8
@@ -188,7 +187,7 @@ void ogx360_ctrl_special_action(struct wired_ctrl *ctrl_data, struct wired_data 
 
         //ets_printf("OSD Active - buttons: 0x%08X, last: 0x%08X\n", osd_btns, last_osd_btns);
         
-        // Sprawdź czy któryś z przycisków OSD został wciśnięty (rising edge)
+        // button press check
         uint32_t new_press = osd_btns & ~last_osd_btns;
         
         if (new_press) {
@@ -441,9 +440,7 @@ void ogx360_ctrl_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *w
     if (!atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE2)) {
         ogx360_process(wired_data->index);
     }
-    //else {
-    //    ets_printf("OSD active - blocking normal processing\n");
-    //}
+    
 }
 
 void ogx360_from_generic(int32_t dev_mode, struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
@@ -473,7 +470,7 @@ void ogx360_fb_to_generic(int32_t dev_mode, struct raw_fb *raw_fb_data, struct g
         fb_data->lf_pwr = 0;
         fb_data->hf_pwr = 0;
 
-    } else if (raw_fb_data->header.data_len == 2) {
+    } else {
         // Format: [0x00, 0x06, left_low, left_high, right_low, right_high]
         fb_data->state = (raw_fb_data->data[0] || raw_fb_data->data[1] ? 1 : 0);
         fb_data->lf_pwr = raw_fb_data->data[0];
