@@ -88,7 +88,20 @@ idf_component_register(SRCS "main.c"
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-address-of-packed-member)
 target_compile_options(${COMPONENT_LIB} PRIVATE -fno-builtin-memset)
 target_compile_options(${COMPONENT_LIB} PRIVATE -fno-builtin-memcpy)
+
+if(CONFIG_BLUERETRO_COVERAGE)
+    target_compile_options(${COMPONENT_LIB} PRIVATE -fprofile-info-section)
+
+    set_source_files_properties(
+        ${cov_srcs}
+        PROPERTIES COMPILE_FLAGS --coverage
+    )
+
+    target_link_libraries(${COMPONENT_TARGET} gcov)
+endif()
+
 idf_build_set_property(COMPILE_DEFINITIONS "-DBLUERETRO" APPEND)
 idf_build_set_property(COMPILE_DEFINITIONS "-DXT_INTEXC_HOOKS" APPEND)
+
 target_link_libraries(${COMPONENT_TARGET} "-u ld_include_my_startup_file")
 target_link_libraries(${COMPONENT_TARGET} "-u ld_include_core0_stall_highint_hdl")

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2024, Jacques Gagnon
+ * Copyright (c) 2019-2025, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -14,6 +14,8 @@
 #include "config.h"
 #include "system/fs.h"
 #include "adapter/gameid.h"
+#include "bluetooth/mon.h"
+#include "system/manager.h"
 
 struct config config;
 struct hw_config hw_config = {
@@ -112,6 +114,7 @@ static uint32_t config_version_magic[] = {
 static uint8_t config_default_combo[BR_COMBO_CNT] = {
     PAD_LM, PAD_RM, PAD_MM, PAD_RB_UP, PAD_RB_LEFT, PAD_RB_RIGHT, PAD_RB_DOWN, PAD_LD_UP, PAD_LD_DOWN, PAD_MS
 };
+static bool config_rst_bare_core = false;
 
 static void config_init_struct(struct config *data);
 static void config_init_nvs_patch(struct config *data);
@@ -383,6 +386,36 @@ static int32_t config_store_on_file(struct config *data, char *filename) {
     return ret;
 }
 
+static bool config_is_rst_required(void) {
+    static uint32_t magic = 0;
+    static uint8_t multitap_cfg = 0;
+    static uint8_t dev_mode[WIRED_MAX_DEV] = {0};
+    bool ret = false;
+
+    if (multitap_cfg != config.global_cfg.multitap_cfg) {
+        ret = true;
+    }
+    multitap_cfg = config.global_cfg.multitap_cfg;
+
+    for (uint32_t i = 0; i < WIRED_MAX_DEV; i++) {
+        if (dev_mode[i] != config.out_cfg[i].dev_mode) {
+            ret = true;
+        }
+        dev_mode[i] = config.out_cfg[i].dev_mode;
+    }
+
+    if (magic != config.magic) {
+        ret = false;
+    }
+    magic = config.magic;
+
+    return ret;
+} 
+
+void IRAM_ATTR config_set_rst_bare_core(bool value) {
+    config_rst_bare_core = value;
+}
+
 void hw_config_patch(void) {
     esp_err_t err;
     nvs_handle_t nvs;
@@ -426,6 +459,10 @@ void config_init(uint32_t src) {
     }
 
     config_load_from_file(&config, filename);
+    if (config_rst_bare_core && config_is_rst_required()) {
+        sys_mgr_cmd(SYS_MGR_CMD_WIRED_RST);
+        printf("# %s: Reloaded wired core cfg: %s\n", __FUNCTION__, filename);
+    }
 }
 
 void config_update(uint32_t dst) {
@@ -441,8 +478,24 @@ void config_update(uint32_t dst) {
     }
 
     config_store_on_file(&config, filename);
+    if (config_rst_bare_core && config_is_rst_required()) {
+        sys_mgr_cmd(SYS_MGR_CMD_WIRED_RST);
+        printf("# %s: Reloaded wired core cfg: %s\n", __FUNCTION__, filename);
+    }
 }
 
 uint32_t config_get_src(void) {
     return config_src;
+}
+
+void config_debug_log(void) {
+        bt_mon_log(true,
+            "Global config: system: 0x%02X multitap: 0x%02X inquiry: 0x%02X banksel: 0x%02X",
+            config.global_cfg.system_cfg, config.global_cfg.multitap_cfg,
+            config.global_cfg.inquiry_mode, config.global_cfg.banksel);
+        bt_mon_log(true, "Output config #0: device_mode: 0x%02X acc_mode: 0x%02X",
+            config.out_cfg[0].dev_mode, config.out_cfg[0].acc_mode);
+        bt_mon_log(true, "Mapping config #0");
+        bt_mon_tx(BT_MON_SYS_NOTE, (uint8_t *)config.in_cfg[0].map_cfg,
+            config.in_cfg[0].map_size * sizeof(config.in_cfg[0].map_cfg[0]));
 }

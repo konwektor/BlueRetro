@@ -1,9 +1,12 @@
 /*
- * Copyright (c) 2021-2023, Jacques Gagnon
+ * Copyright (c) 2021-2025, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <string.h>
+#include "cdi_uart.h"
+#include "sdkconfig.h"
+#if defined (CONFIG_BLUERETRO_SYSTEM_CDI)
 #include <hal/clk_gate_ll.h>
 #include <soc/uart_periph.h>
 #include <hal/uart_ll.h>
@@ -19,7 +22,6 @@
 #include "system/intr.h"
 #include "adapter/kb_monitor.h"
 #include "adapter/wired/cdi.h"
-#include "cdi_uart.h"
 
 #define UART1_INTR_NUM 19
 #define UART2_INTR_NUM 20
@@ -263,9 +265,12 @@ static unsigned isr_dispatch(unsigned cause) {
     }
     return 0;
 }
+#endif /* defined (CONFIG_BLUERETRO_SYSTEM_CDI */
 
 void cdi_uart_init(uint32_t package) {
+#if defined (CONFIG_BLUERETRO_SYSTEM_CDI)
     gpio_config_t io_conf = {0};
+    config_set_rst_bare_core(true);
 
     for (uint32_t i = 0; i < CDI_PORT_MAX; i++) {
         struct cdi_ctrl_port *p = &cdi_ctrl_ports[i];
@@ -354,4 +359,5 @@ void cdi_uart_init(uint32_t package) {
     intexc_alloc_iram(ETS_GPIO_INTR_SOURCE, GPIO_INTR_NUM, isr_dispatch);
 
     tx_hdlr();
+#endif /* defined (CONFIG_BLUERETRO_SYSTEM_CDI */
 }

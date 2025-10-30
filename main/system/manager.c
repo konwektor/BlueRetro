@@ -19,6 +19,7 @@
 #include "esp_rom_gpio.h"
 #include "adapter/adapter.h"
 #include "adapter/config.h"
+#include "adapter/memory_card.h"
 #include "bluetooth/host.h"
 #include "bluetooth/hci.h"
 #include "wired/wired_bare.h"
@@ -77,6 +78,7 @@ static uint8_t led_init_cnt = 1;
 static uint16_t port_state = 0;
 static RingbufHandle_t cmd_q_hdl = NULL;
 static uint32_t chip_package = EFUSE_RD_CHIP_VER_PKG_ESP32D0WDQ6;
+static bool factory_reset = false;
 
 static int32_t sys_mgr_get_power(void);
 static int32_t sys_mgr_get_boot_btn(void);
@@ -191,7 +193,7 @@ static void internal_flag_init(void) {
 
 static void port_led_pulse(uint32_t pin) {
     if (pin) {
-        gpio_hal_iomux_func_sel(GPIO_PIN_MUX_REG[pin], PIN_FUNC_GPIO);
+        PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[pin], PIN_FUNC_GPIO);
         gpio_set_direction(pin, GPIO_MODE_OUTPUT);
         esp_rom_gpio_connect_out_signal(pin, ledc_periph_signal[LEDC_HIGH_SPEED_MODE].sig_out0_idx + LEDC_CHANNEL_0, 0, 0);
     }
@@ -204,7 +206,7 @@ static void set_leds_as_btn_status(uint8_t state) {
     for (uint32_t i = 0; i < hw_config.port_cnt; i++) {
         uint8_t pin = led_list[i];
 
-        gpio_hal_iomux_func_sel(GPIO_PIN_MUX_REG[pin], PIN_FUNC_GPIO);
+        PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[pin], PIN_FUNC_GPIO);
         gpio_set_direction(pin, GPIO_MODE_OUTPUT);
         if (state) {
             esp_rom_gpio_connect_out_signal(pin, ledc_periph_signal[LEDC_LOW_SPEED_MODE].sig_out0_idx + LEDC_CHANNEL_1, 0, 0);
@@ -345,7 +347,7 @@ static void wired_port_hdl(void) {
             update++;
         }
     }
-    if (update) {
+    if (update && !mc_get_state()) {
         printf("# %s: Update ports state: %04X\n", __FUNCTION__, port_mask);
         wired_bare_port_cfg(port_mask);
         port_state = port_mask;
@@ -386,6 +388,10 @@ static void boot_btn_hdl(void) {
                 ledc_set_duty_and_update(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1, hw_config.led_flash_duty_cycle, 0);
                 ledc_set_freq(LEDC_LOW_SPEED_MODE, LEDC_TIMER_1, hw_config.led_flash_hz[state]);
                 state++;
+            }
+            if (hold_cnt == 3000) {
+                printf("# FW will be factory reset\n");
+                factory_reset = true;
             }
             vTaskDelay(10 / portTICK_PERIOD_MS);
         }
@@ -534,7 +540,7 @@ static int32_t sys_mgr_get_boot_btn(void) {
 static void sys_mgr_factory_reset(void) {
     const esp_partition_t* partition = esp_partition_find_first(
             ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, "otadata");
-    if (partition) {
+    if (factory_reset && partition) {
         esp_partition_erase_range(partition, 0, partition->size);
     }
 
@@ -576,6 +582,13 @@ void sys_mgr_cmd(uint8_t cmd) {
         UBaseType_t ret = xRingbufferSend(cmd_q_hdl, &cmd, sizeof(cmd), portMAX_DELAY);
         if (ret != pdTRUE) {
             printf("# %s cmd_q full!\n", __FUNCTION__);
+        }
+    }
+    else {
+        printf("# %s cmd_q_hdl NULL!\n", __FUNCTION__);
+        if (cmd == SYS_MGR_CMD_WIRED_RST) {
+            /* For gameid cfg we may need to reset bare core very early */
+            sys_mgr_wired_reset();
         }
     }
 }
@@ -660,7 +673,6 @@ void sys_mgr_init(uint32_t package) {
         case DC:
         case GC:
             hw_config.port_cnt = 4;
-            hw_config.hotplug = 1;
             break;
         case PARALLEL_1P:
         case PCE:
@@ -675,6 +687,10 @@ void sys_mgr_init(uint32_t package) {
             hw_config.port_cnt = 2;
             break;
     }
+
+#ifdef CONFIG_BLUERETRO_BT_H4_TRACE
+    hw_config.port_cnt = 1;
+#endif
 
     io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
 #ifdef CONFIG_BLUERETRO_HW2

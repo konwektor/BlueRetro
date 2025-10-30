@@ -12,72 +12,132 @@ from device_data.saturn import saturn, saturn_btns_mask
 
 
 DEVICE_NAME = 'HID Generic'
-HID_DESC = (
-    '05010905a10185010901a10009300931'
-    '150027ff000000950275088102c00901'
-    'a100093209351500270f000000950275'
-    '048102c0050209c5150026ff00950175'
-    '088102050209c4150026ff0095017508'
-    '810205010939150125083500463b0166'
-    '14007504950181427504950115002500'
-    '35004500650081030509190129101500'
-    '2501750195108102c0'
-)
+HID_DESC = bytes([
+    0x05, 0x01,        # Usage Page (Generic Desktop)
+    0x09, 0x05,        # Usage (Gamepad)
+    0xA1, 0x01,        # Collection (Application)
+    0x85, 0x01,        #   Report ID (1)
+    0x09, 0x01,        #   Usage (Pointer)
+    0xA1, 0x00,        #   Collection (Physical)
+    0x09, 0x30,        #     Usage (X)
+    0x09, 0x31,        #     Usage (Y)
+    0x15, 0x00,        #     Logical Minimum (0)
+    0x27, 0xFF, 0x00, 0x00, 0x00,  #     Logical Maximum (254)
+    0x95, 0x02,        #     Report Count (2)
+    0x75, 0x08,        #     Report Size (8)
+    0x81, 0x02,        #     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+    0xC0,              #   End Collection
+    0x09, 0x01,        #   Usage (Pointer)
+    0xA1, 0x00,        #   Collection (Physical)
+    0x09, 0x32,        #     Usage (Z)
+    0x09, 0x35,        #     Usage (Rz)
+    0x15, 0x00,        #     Logical Minimum (0)
+    0x27, 0x0F, 0x00, 0x00, 0x00,  #     Logical Maximum (14)
+    0x95, 0x02,        #     Report Count (2)
+    0x75, 0x04,        #     Report Size (4)
+    0x81, 0x02,        #     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+    0xC0,              #   End Collection
+    0x05, 0x02,        #   Usage Page (Simulation Controls)
+    0x09, 0xC5,        #   Usage (Brake)
+    0x15, 0x00,        #   Logical Minimum (0)
+    0x26, 0xFF, 0x00,  #   Logical Maximum (255)
+    0x95, 0x01,        #   Report Count (1)
+    0x75, 0x08,        #   Report Size (8)
+    0x81, 0x02,        #   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+    0x05, 0x02,        #   Usage Page (Simulation Controls)
+    0x09, 0xC4,        #   Usage (Accelerator)
+    0x15, 0x00,        #   Logical Minimum (0)
+    0x26, 0xFF, 0x00,  #   Logical Maximum (255)
+    0x95, 0x01,        #   Report Count (1)
+    0x75, 0x08,        #   Report Size (8)
+    0x81, 0x02,        #   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+    0x05, 0x01,        #   Usage Page (Generic Desktop)
+    0x09, 0x39,        #   Usage (Hat Switch)
+    0x15, 0x01,        #   Logical Minimum (1)
+    0x25, 0x08,        #   Logical Maximum (8)
+    0x35, 0x00,        #   Physical Minimum (0)
+    0x46, 0x3B, 0x01,  #   Physical Maximum (315)
+    0x66, 0x14, 0x00,  #   Unit (System: English Rotation, Length: Centimeter)
+    0x75, 0x04,        #   Report Size (4)
+    0x95, 0x01,        #   Report Count (1)
+    0x81, 0x42,        #   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,Null State)
+    0x75, 0x04,        #   Report Size (4)
+    0x95, 0x01,        #   Report Count (1)
+    0x15, 0x00,        #   Logical Minimum (0)
+    0x25, 0x00,        #   Logical Maximum (0)
+    0x35, 0x00,        #   Physical Minimum (0)
+    0x45, 0x00,        #   Physical Maximum (0)
+    0x65, 0x00,        #   Unit (None)
+    0x81, 0x03,        #   Input (Const,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+    0x05, 0x09,        #   Usage Page (Button)
+    0x19, 0x01,        #   Usage Minimum (0x01)
+    0x29, 0x10,        #   Usage Maximum (0x10)
+    0x15, 0x00,        #   Logical Minimum (0)
+    0x25, 0x01,        #   Logical Maximum (1)
+    0x75, 0x01,        #   Report Size (1)
+    0x95, 0x10,        #   Report Count (16)
+    0x81, 0x02,        #   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+    0xC0,              # End Collection
+
+    # 137 bytes
+])
 
 
 def test_hid_controller_b_descriptor(blueretro):
     ''' Load a HID descriptor and check if it's parsed right. '''
     # Set device name
-    blueretro.send_name(DEVICE_NAME)
-    blueretro.expect('# dev: 0 type: 0:0 HID Generic')
+    rsp = blueretro.send_name(DEVICE_NAME)
+    assert rsp['device_name']['device_id'] == 0
+    assert rsp['device_name']['device_type'] == 0
+    assert rsp['device_name']['device_subtype'] == 0
+    assert rsp['device_name']['device_name'] == 'HID Generic'
 
     # Validate HID descriptor
-    blueretro.send_hid_desc(HID_DESC)
-    report = blueretro.expect_json('parsed_hid_report')
+    rsp = blueretro.send_hid_desc(HID_DESC)
 
-    assert report["report_id"] == 1
+    assert rsp['hid_reports'][0]['report_id'] == 1
 
-    assert report["usages"][0]["usage_page"] == 1
-    assert report["usages"][0]["usage"] == 48
-    assert report["usages"][0]["bit_offset"] == 0
-    assert report["usages"][0]["bit_size"] == 8
+    assert rsp['hid_reports'][0]['usages'][0]['usage_page'] == 1
+    assert rsp['hid_reports'][0]['usages'][0]['usage'] == 48
+    assert rsp['hid_reports'][0]['usages'][0]['bit_offset'] == 0
+    assert rsp['hid_reports'][0]['usages'][0]['bit_size'] == 8
 
-    assert report["usages"][1]["usage_page"] == 1
-    assert report["usages"][1]["usage"] == 49
-    assert report["usages"][1]["bit_offset"] == 8
-    assert report["usages"][1]["bit_size"] == 8
+    assert rsp['hid_reports'][0]['usages'][1]['usage_page'] == 1
+    assert rsp['hid_reports'][0]['usages'][1]['usage'] == 49
+    assert rsp['hid_reports'][0]['usages'][1]['bit_offset'] == 8
+    assert rsp['hid_reports'][0]['usages'][1]['bit_size'] == 8
 
-    assert report["usages"][2]["usage_page"] == 1
-    assert report["usages"][2]["usage"] == 50
-    assert report["usages"][2]["bit_offset"] == 16
-    assert report["usages"][2]["bit_size"] == 4
+    assert rsp['hid_reports'][0]['usages'][2]['usage_page'] == 1
+    assert rsp['hid_reports'][0]['usages'][2]['usage'] == 50
+    assert rsp['hid_reports'][0]['usages'][2]['bit_offset'] == 16
+    assert rsp['hid_reports'][0]['usages'][2]['bit_size'] == 4
 
-    assert report["usages"][3]["usage_page"] == 1
-    assert report["usages"][3]["usage"] == 53
-    assert report["usages"][3]["bit_offset"] == 20
-    assert report["usages"][3]["bit_size"] == 4
+    assert rsp['hid_reports'][0]['usages'][3]['usage_page'] == 1
+    assert rsp['hid_reports'][0]['usages'][3]['usage'] == 53
+    assert rsp['hid_reports'][0]['usages'][3]['bit_offset'] == 20
+    assert rsp['hid_reports'][0]['usages'][3]['bit_size'] == 4
 
-    assert report["usages"][4]["usage_page"] == 2
-    assert report["usages"][4]["usage"] == 197
-    assert report["usages"][4]["bit_offset"] == 24
-    assert report["usages"][4]["bit_size"] == 8
+    assert rsp['hid_reports'][0]['usages'][4]['usage_page'] == 2
+    assert rsp['hid_reports'][0]['usages'][4]['usage'] == 197
+    assert rsp['hid_reports'][0]['usages'][4]['bit_offset'] == 24
+    assert rsp['hid_reports'][0]['usages'][4]['bit_size'] == 8
 
-    assert report["usages"][5]["usage_page"] == 2
-    assert report["usages"][5]["usage"] == 196
-    assert report["usages"][5]["bit_offset"] == 32
-    assert report["usages"][5]["bit_size"] == 8
+    assert rsp['hid_reports'][0]['usages'][5]['usage_page'] == 2
+    assert rsp['hid_reports'][0]['usages'][5]['usage'] == 196
+    assert rsp['hid_reports'][0]['usages'][5]['bit_offset'] == 32
+    assert rsp['hid_reports'][0]['usages'][5]['bit_size'] == 8
 
-    assert report["usages"][6]["usage_page"] == 1
-    assert report["usages"][6]["usage"] == 57
-    assert report["usages"][6]["bit_offset"] == 40
-    assert report["usages"][6]["bit_size"] == 4
+    assert rsp['hid_reports'][0]['usages'][6]['usage_page'] == 1
+    assert rsp['hid_reports'][0]['usages'][6]['usage'] == 57
+    assert rsp['hid_reports'][0]['usages'][6]['bit_offset'] == 40
+    assert rsp['hid_reports'][0]['usages'][6]['bit_size'] == 4
 
-    assert report["usages"][7]["usage_page"] == 9
-    assert report["usages"][7]["usage"] == 1
-    assert report["usages"][7]["bit_offset"] == 48
-    assert report["usages"][7]["bit_size"] == 16
+    assert rsp['hid_reports'][0]['usages'][7]['usage_page'] == 9
+    assert rsp['hid_reports'][0]['usages'][7]['usage'] == 1
+    assert rsp['hid_reports'][0]['usages'][7]['bit_offset'] == 48
+    assert rsp['hid_reports'][0]['usages'][7]['bit_size'] == 16
 
-    assert report["report_type"] == report_type.PAD
+    assert rsp['hid_reports'][0]['report_type'] == report_type.PAD
 
 
 def test_hid_controller_b_default_buttons_mapping(blueretro):
@@ -97,11 +157,9 @@ def test_hid_controller_b_default_buttons_mapping(blueretro):
             '0000'
         )
 
-    blueretro.flush_logs()
-
     # Validate buttons default mapping
-    for hid_btns, br_btns in btns_generic_test_data(hid_btns_mask, 0xAA7FA000):
-        blueretro.send_hid_report(
+    for hid_btns, br_btns in btns_generic_test_data(hid_btns_mask, 0xFFFF0000):
+        rsp = blueretro.send_hid_report(
             'a101'
             '8080'
             '88'
@@ -110,16 +168,13 @@ def test_hid_controller_b_default_buttons_mapping(blueretro):
             f'{swap16(hid_btns):04x}'
         )
 
-        wireless = blueretro.expect_json('wireless_input')
-        br_generic = blueretro.expect_json('generic_input')
-
-        assert wireless['btns'] == hid_btns
-        assert br_generic['btns'][0] == br_btns
+        assert rsp['wireless_input']['btns'] == hid_btns
+        assert rsp['generic_input']['btns'][0] == br_btns
 
     # Validate hat default mapping
     shifted_hat = hat_to_ld_btns[-1:] + hat_to_ld_btns[:-1]
     for hat_value, br_btns in enumerate(shifted_hat):
-        blueretro.send_hid_report(
+        rsp = blueretro.send_hid_report(
             'a101'
             '8080'
             '88'
@@ -128,11 +183,8 @@ def test_hid_controller_b_default_buttons_mapping(blueretro):
             '0000'
         )
 
-        wireless = blueretro.expect_json('wireless_input')
-        br_generic = blueretro.expect_json('generic_input')
-
-        assert wireless['hat'] == hat_value
-        assert br_generic['btns'][0] == br_btns
+        assert rsp['wireless_input']['hat'] == hat_value
+        assert rsp['generic_input']['btns'][0] == br_btns
 
 
 def test_hid_controller_b_axes_default_scaling(blueretro):
@@ -152,8 +204,6 @@ def test_hid_controller_b_axes_default_scaling(blueretro):
             '0000'
         )
 
-    blueretro.flush_logs()
-
     hid_axes = {
         axis.LX: {'neutral': 0x80, 'abs_max': 0x7F, 'abs_min': 0x80, 'deadzone': 0},
         axis.LY: {'neutral': 0x80, 'abs_max': 0x7F, 'abs_min': 0x80, 'polarity': 1, 'deadzone': 0},
@@ -168,7 +218,7 @@ def test_hid_controller_b_axes_default_scaling(blueretro):
     axes_gen = axes_test_data_generator(hid_axes, gc_axes, 0.0135)
     for _ in range(5):
         axes = next(axes_gen)
-        blueretro.send_hid_report(
+        rsp = blueretro.send_hid_report(
             'a101'
             f'{axes[axis.LX]["wireless"]:02x}{axes[axis.LY]["wireless"]:02x}'
             f'{axes[axis.RY]["wireless"]:01x}{axes[axis.RX]["wireless"]:01x}'
@@ -177,16 +227,11 @@ def test_hid_controller_b_axes_default_scaling(blueretro):
             '0000'
         )
 
-        wireless = blueretro.expect_json('wireless_input')
-        br_generic = blueretro.expect_json('generic_input')
-        br_mapped = blueretro.expect_json('mapped_input')
-        wired = blueretro.expect_json('wired_output')
-
         for ax in islice(axis, 0, 6):
-            assert wireless['axes'][ax] == axes[ax]['wireless']
-            assert br_generic['axes'][ax] == axes[ax]['generic']
-            assert br_mapped['axes'][ax] == pytest.approx(axes[ax]['mapped'], 0.1)
-            assert wired['axes'][ax] == pytest.approx(axes[ax]['wired'], 0.1)
+            assert rsp['wireless_input']['axes'][ax] == axes[ax]['wireless']
+            assert rsp['generic_input']['axes'][ax] == axes[ax]['generic']
+            assert rsp['mapped_input']['axes'][ax] == pytest.approx(axes[ax]['mapped'], 0.1)
+            assert rsp['wired_output']['axes'][ax] == pytest.approx(axes[ax]['wired'], 0.1)
 
 
 @pytest.mark.parametrize('blueretro', [[system.SATURN, dev_mode.PAD_ALT, bt_conn_type.BT_BR_EDR]], indirect=True)
@@ -206,12 +251,10 @@ def test_hid_controller_b_saturn_buttons_mapping(blueretro):
             '0000'
         )
 
-    blueretro.flush_logs()
-
     # Validate buttons default mapping
-    for hid_btns, wired_btns in btns_generic_to_wired_test_data(hid_btns_mask, saturn_btns_mask, 0xAA7FA000):
+    for hid_btns, wired_btns in btns_generic_to_wired_test_data(hid_btns_mask, saturn_btns_mask, 0x221F0000):
         wired_btns ^= 0xFFFF
-        blueretro.send_hid_report(
+        rsp = blueretro.send_hid_report(
             'a101'
             '8080'
             '88'
@@ -220,11 +263,8 @@ def test_hid_controller_b_saturn_buttons_mapping(blueretro):
             f'{swap16(hid_btns):04x}'
         )
 
-        wireless = blueretro.expect_json('wireless_input')
-        wired = blueretro.expect_json('wired_output')
-
-        assert wireless['btns'] == hid_btns
-        assert wired['btns'] == wired_btns
+        assert rsp['wireless_input']['btns'] == hid_btns
+        assert rsp['wired_output']['btns'] == wired_btns
 
 
 @pytest.mark.parametrize('blueretro', [[system.SATURN, dev_mode.PAD_ALT, bt_conn_type.BT_BR_EDR]], indirect=True)
@@ -254,10 +294,8 @@ def test_hid_controller_b_saturn_triggers_mapping(blueretro):
         '0000'
     )
 
-    blueretro.expect_json('wired_output')
-
     # Test trigger ON threshold for digital bits
-    blueretro.send_hid_report(
+    rsp = blueretro.send_hid_report(
         'a101'
         '8080'
         '88'
@@ -265,11 +303,10 @@ def test_hid_controller_b_saturn_triggers_mapping(blueretro):
         '00'
         '0000'
     )
-    wired = blueretro.expect_json('wired_output')
-    assert wired['btns'] ^ 0xFFFF == bit(saturn.L) | bit(saturn.R)
+    assert rsp['wired_output']['btns'] ^ 0xFFFF == bit(saturn.L) | bit(saturn.R)
 
     # Test trigger below ON threshold but over OFF threshold for digital bits
-    blueretro.send_hid_report(
+    rsp = blueretro.send_hid_report(
         'a101'
         '8080'
         '88'
@@ -277,11 +314,10 @@ def test_hid_controller_b_saturn_triggers_mapping(blueretro):
         '00'
         '0000'
     )
-    wired = blueretro.expect_json('wired_output')
-    assert wired['btns'] ^ 0xFFFF == bit(saturn.L) | bit(saturn.R)
+    assert rsp['wired_output']['btns'] ^ 0xFFFF == bit(saturn.L) | bit(saturn.R)
 
     # Test trigger below OFF threshold for digital bits
-    blueretro.send_hid_report(
+    rsp = blueretro.send_hid_report(
         'a101'
         '8080'
         '88'
@@ -289,5 +325,4 @@ def test_hid_controller_b_saturn_triggers_mapping(blueretro):
         '00'
         '0000'
     )
-    wired = blueretro.expect_json('wired_output')
-    assert wired['btns'] ^ 0xFFFF == 0
+    assert rsp['wired_output']['btns'] ^ 0xFFFF == 0

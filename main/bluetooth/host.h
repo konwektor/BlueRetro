@@ -17,6 +17,7 @@
 
 #define BT_MAX_RETRY 3
 #define BT_SDP_DATA_SIZE 2048
+#define BT_PNP_DATA_SIZE 256
 
 enum {
     /* BT device connection flags */
@@ -34,14 +35,6 @@ enum {
     BT_DEV_FB_DELAY,
     BT_DEV_CALIB_SET,
     BT_DEV_PPCP_DONE,
-};
-
-enum {
-    /* BT Sniff states */
-    BT_SNIFF_DISABLE = 0,
-    BT_SNIFF_SET_PENDING,
-    BT_SNIFF_SET,
-    BT_SNIFF_EXIT_PENDING,
 };
 
 struct bt_name_type {
@@ -69,11 +62,10 @@ struct bt_dev {
         bt_addr_le_t le_remote_bdaddr;
     };
     uint16_t acl_handle;
-    uint16_t sniff_interval;
-    uint16_t sniff_state;
     uint32_t hid_state;
     void *timer_hdl;
     uint8_t tid;
+    uint8_t hid_retry_cnt;
     const struct bt_name_type *name;
     union {
         struct {
@@ -138,7 +130,6 @@ struct bt_hci_pkt {
 
 extern struct bt_hci_pkt bt_hci_pkt_tmp;
 
-void bt_host_update_sniff_interval(void);
 uint32_t bt_host_get_flag_dev_cnt(uint32_t flag);
 void bt_host_disconnect_all(void);
 int32_t bt_host_get_new_dev(struct bt_dev **device);
@@ -156,6 +147,7 @@ int32_t bt_host_init(void);
 int32_t bt_host_txq_add(uint8_t *packet, uint32_t packet_len);
 int32_t bt_host_load_link_key(struct bt_hci_cp_link_key_reply *link_key_reply);
 int32_t bt_host_store_link_key(struct bt_hci_evt_link_key_notify *link_key_notify);
+void bt_host_clear_le_ltk(bt_addr_le_t *le_bdaddr);
 int32_t bt_host_load_le_ltk(bt_addr_le_t *le_bdaddr, struct bt_smp_encrypt_info *encrypt_info, struct bt_smp_master_ident *master_ident);
 int32_t bt_host_store_le_ltk(bt_addr_le_t *le_bdaddr, struct bt_smp_encrypt_info *encrypt_info);
 int32_t bt_host_store_le_ident(bt_addr_le_t *le_bdaddr, struct bt_smp_master_ident *master_ident);

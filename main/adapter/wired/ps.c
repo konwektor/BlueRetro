@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2024, Jacques Gagnon
+ * Copyright (c) 2019-2025, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,6 +9,8 @@
 #include "adapter/config.h"
 #include "adapter/kb_monitor.h"
 #include "adapter/wired/wired.h"
+#include "tests/cmds.h"
+#include "bluetooth/mon.h"
 #include "ps.h"
 
 #define PS_JOYSTICK_AXES_CNT 4
@@ -96,8 +98,13 @@ struct ps_mouse_map {
     int32_t raw_axes[2];
 } __packed;
 
+#ifndef CONFIG_BLUERETRO_ADAPTER_INPUT_MAP_DBG
 static const uint32_t ps_mask[4] = {0xBB7F0FFF, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t ps_desc[4] = {0x330F0FFF, 0x00000000, 0x00000000, 0x00000000};
+#else
+static const uint32_t ps_mask[4] = {0xFFFFFFFF, 0x00000000, 0x00000000, BR_COMBO_MASK};
+static const uint32_t ps_desc[4] = {0x110000FF, 0x00000000, 0x00000000, 0x00000000};
+#endif
 static DRAM_ATTR const uint32_t ps_btns_mask[32] = {
     0, 0, 0, 0,
     0, 0, 0, 0,
@@ -296,12 +303,14 @@ static void ps_ctrl_from_generic(struct wired_ctrl *ctrl_data, struct wired_data
 
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp));
 
-#ifdef CONFIG_BLUERETRO_RAW_OUTPUT
-    printf("{\"log_type\": \"wired_output\", \"axes\": [%d, %d, %d, %d], \"btns\": [%d, %d]}\n",
+    TESTS_CMDS_LOG("\"wired_output\": {\"axes\": [%d, %d, %d, %d], \"btns\": [%d, %d]},\n",
         map_tmp.axes[ps_axes_idx[0]], map_tmp.axes[ps_axes_idx[1]],
         map_tmp.axes[ps_axes_idx[2]], map_tmp.axes[ps_axes_idx[3]],
         map_tmp.buttons, map_tmp.analog_btn);
-#endif
+    BT_MON_LOG("\"wired_output\": {\"axes\": [%02X, %02X, %02X, %02X], \"btns\": [%04X, %02X]},\n",
+        map_tmp.axes[ps_axes_idx[0]], map_tmp.axes[ps_axes_idx[1]],
+        map_tmp.axes[ps_axes_idx[2]], map_tmp.axes[ps_axes_idx[3]],
+        map_tmp.buttons, map_tmp.analog_btn);
 }
 
 static void ps_mouse_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
@@ -386,15 +395,22 @@ void ps_fb_to_generic(int32_t dev_mode, struct raw_fb *raw_fb_data, struct gener
     fb_data->wired_id = raw_fb_data->header.wired_id;
     fb_data->type = raw_fb_data->header.type;
 
-    switch (fb_data->type) {
-        case FB_TYPE_RUMBLE:
-            fb_data->state = (raw_fb_data->data[0] || raw_fb_data->data[1] ? 1 : 0);
-            fb_data->lf_pwr = raw_fb_data->data[1];
-            fb_data->hf_pwr = (raw_fb_data->data[0] == 0x01) ? 0xFF : 0x00;
-            break;
-        case FB_TYPE_STATUS_LED:
-            fb_data->led = raw_fb_data->data[0];
-            break;
+    /* This stop rumble when BR timeout trigger */
+    if (raw_fb_data->header.data_len == 0) {
+        fb_data->state = 0;
+        fb_data->lf_pwr = fb_data->hf_pwr = 0;
+    }
+    else {
+        switch (fb_data->type) {
+            case FB_TYPE_RUMBLE:
+                fb_data->state = (raw_fb_data->data[0] || raw_fb_data->data[1] ? 1 : 0);
+                fb_data->lf_pwr = raw_fb_data->data[1];
+                fb_data->hf_pwr = (raw_fb_data->data[0] == 0x01) ? 0xFF : 0x00;
+                break;
+            case FB_TYPE_STATUS_LED:
+                fb_data->led = raw_fb_data->data[0];
+                break;
+        }
     }
 }
 

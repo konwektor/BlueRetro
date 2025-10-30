@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2023, Jacques Gagnon
+ * Copyright (c) 2021-2025, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -12,11 +12,8 @@
 #include "xtensa/core-macros.h"
 #include "sdkconfig.h"
 #include "system/fs.h"
+#include "config.h"
 #include "memory_card.h"
-
-#define MC_BUFFER_SIZE (128 * 1024)
-#define MC_BUFFER_BLOCK_SIZE (4 * 1024)
-#define MC_BUFFER_BLOCK_CNT (MC_BUFFER_SIZE / MC_BUFFER_BLOCK_SIZE)
 
 /* Related to bare metal hack, something goes writing there. */
 /* Workaround: Remove region from heap pool until I figure it out */
@@ -25,6 +22,7 @@ SOC_RESERVE_MEMORY_REGION(0x3FFE7D98, 0x3FFE7E28, bad_region);
 static uint8_t *mc_buffer[MC_BUFFER_BLOCK_CNT] = {0};
 static esp_timer_handle_t mc_timer_hdl = NULL;
 static int32_t mc_block_state = 0;
+static bool mc_ready = false;
 
 static int32_t mc_restore(void);
 static int32_t mc_store(void);
@@ -131,32 +129,40 @@ static inline void mc_store_cb(void *arg) {
     (void)mc_store_spread();
 }
 
-int32_t mc_init(void) {
-    int32_t ret = -1;
-    const esp_timer_create_args_t mc_timer_args = {
-        .callback = &mc_store_cb,
-        .arg = (void *)NULL,
-        .name = "mc_timer"
-    };
-
+int32_t mc_init_mem(void) {
     for (uint32_t i = 0; i < MC_BUFFER_BLOCK_CNT; i++) {
-        mc_buffer[i] = malloc(MC_BUFFER_BLOCK_SIZE);
+        mc_buffer[i] = heap_caps_malloc(MC_BUFFER_BLOCK_SIZE, MALLOC_CAP_DMA);
 
         if (mc_buffer[i] == NULL) {
             printf("# %s mc_buffer[%ld] alloc fail\n", __FUNCTION__, i);
             heap_caps_dump_all();
-            goto exit;
+            return -1;
         }
     }
 
-    esp_timer_create(&mc_timer_args, &mc_timer_hdl);
+    return 0;
+}
 
-    ret = mc_restore();
+int32_t mc_init(void) {
+    int32_t ret = -1;
+
+    if (config.global_cfg.banksel < CONFIG_BANKSEL_MAX) {
+        const esp_timer_create_args_t mc_timer_args = {
+            .callback = &mc_store_cb,
+            .arg = (void *)NULL,
+            .name = "mc_timer"
+        };
+
+        esp_timer_create(&mc_timer_args, &mc_timer_hdl);
+
+        ret = mc_restore();
+    }
+
+    if (ret == 0) {
+        mc_ready = true;
+    }
 
     return ret;
-
-exit:
-    return -1;
 }
 
 void mc_storage_update(void) {
@@ -173,14 +179,25 @@ void IRAM_ATTR mc_write(uint32_t addr, uint8_t *data, uint32_t size) {
     uint32_t block = addr >> 12;
 
     memcpy(mc_buffer[block] + (addr & 0xFFF), data, size);
-    atomic_set_bit(&mc_block_state, block);
 
-    fb_data.header.wired_id = 0;
-    fb_data.header.type = FB_TYPE_MEM_WRITE;
-    fb_data.header.data_len = 0;
-    adapter_q_fb(&fb_data);
+    if (config.global_cfg.banksel < CONFIG_BANKSEL_MAX) {
+        atomic_set_bit(&mc_block_state, block);
+
+        fb_data.header.wired_id = 0;
+        fb_data.header.type = FB_TYPE_MEM_WRITE;
+        fb_data.header.data_len = 0;
+        adapter_q_fb(&fb_data);
+    }
 }
 
 uint8_t IRAM_ATTR *mc_get_ptr(uint32_t addr) {
     return mc_buffer[addr >> 12] + (addr & 0xFFF);
+}
+
+uint32_t IRAM_ATTR mc_get_state(void) {
+    return mc_block_state;
+}
+
+bool IRAM_ATTR mc_get_ready(void) {
+    return mc_ready;
 }

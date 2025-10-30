@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2023, Jacques Gagnon
+ * Copyright (c) 2021-2025, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -31,15 +31,37 @@ static void face_btns_rotate_right(struct raw_src_mapping *map) {
 }
 
 static void face_btns_trigger_to_6buttons(struct raw_src_mapping *map) {
-    map->desc[0] = 0x000000FF;
+    map->desc[0] = 0x200200FF;
 
     map->btns_mask[PAD_LM] = map->btns_mask[PAD_RB_LEFT];
     map->btns_mask[PAD_RB_LEFT] = map->btns_mask[PAD_RB_DOWN];
     map->btns_mask[PAD_RB_DOWN] = map->btns_mask[PAD_RB_RIGHT];
     map->btns_mask[PAD_RB_RIGHT] = 0;
 
-    map->axes_to_btns[TRIG_L] = PAD_RS;
-    map->axes_to_btns[TRIG_R] = PAD_RB_RIGHT;
+    map->axes_idx[TRIG_RS] = map->axes_idx[TRIG_L];
+    map->axes_idx[TRIG_L] = -1;
+    memcpy(&map->meta[TRIG_RS], &map->meta[TRIG_L], sizeof(map->meta[0]));
+
+    map->axes_idx[BTN_RIGHT] = map->axes_idx[TRIG_R];
+    map->axes_idx[TRIG_R] = -1;
+    memcpy(&map->meta[BTN_RIGHT], &map->meta[TRIG_R], sizeof(map->meta[0]));
+}
+
+static void face_btns_trigger_to_8buttons(struct raw_src_mapping *map) {
+    map->desc[0] = 0x100200FF;
+
+    map->btns_mask[PAD_LM] = map->btns_mask[PAD_LS];
+    map->btns_mask[PAD_LS] = map->btns_mask[PAD_RB_LEFT];
+    map->btns_mask[PAD_RB_LEFT] = map->btns_mask[PAD_RB_DOWN];
+    map->btns_mask[PAD_RB_DOWN] = map->btns_mask[PAD_RB_RIGHT];
+
+    map->btns_mask[PAD_RB_RIGHT] = 0;
+    map->axes_idx[BTN_RIGHT] = map->axes_idx[TRIG_R];
+    memcpy(&map->meta[BTN_RIGHT], &map->meta[TRIG_R], sizeof(map->meta[0]));
+
+    map->axes_idx[TRIG_R] = map->axes_idx[TRIG_L];
+    map->axes_idx[TRIG_L] = -1;
+    memcpy(&map->meta[TRIG_R], &map->meta[TRIG_L], sizeof(map->meta[0]));
 }
 
 static void trigger_pri_sec_invert(struct raw_src_mapping *map) {
@@ -83,7 +105,7 @@ static void n64_8bitdo_mk(struct raw_src_mapping *map) {
 }
 
 static void m30_8bitdo(struct raw_src_mapping *map) {
-    map->desc[0] = 0x000000FF;
+    map->desc[0] = 0x100200FF;
 
     map->btns_mask[PAD_LM] = map->btns_mask[PAD_LS];
     map->btns_mask[PAD_LS] = map->btns_mask[PAD_RB_LEFT];
@@ -91,8 +113,22 @@ static void m30_8bitdo(struct raw_src_mapping *map) {
     map->btns_mask[PAD_RB_DOWN] = map->btns_mask[PAD_RB_RIGHT];
     map->btns_mask[PAD_RB_RIGHT] = 0;
 
-    map->axes_to_btns[TRIG_L] = PAD_RM;
-    map->axes_to_btns[TRIG_R] = PAD_RB_RIGHT;
+    map->btns_mask[PAD_RB_RIGHT] = 0;
+    map->axes_idx[BTN_RIGHT] = map->axes_idx[TRIG_R];
+    memcpy(&map->meta[BTN_RIGHT], &map->meta[TRIG_R], sizeof(map->meta[0]));
+
+    map->axes_idx[TRIG_R] = map->axes_idx[TRIG_L];
+    map->axes_idx[TRIG_L] = -1;
+    memcpy(&map->meta[TRIG_R], &map->meta[TRIG_L], sizeof(map->meta[0]));
+}
+
+static void m30_8bitdo_modkit(struct raw_src_mapping *map) {
+    map->btns_mask[PAD_RB_LEFT] = BIT(0);
+    map->btns_mask[PAD_RB_RIGHT] = BIT(5);
+    map->btns_mask[PAD_RB_DOWN] = BIT(1);
+    map->btns_mask[PAD_RB_UP] = BIT(3);
+    map->btns_mask[PAD_LS] = BIT(2);
+    map->btns_mask[PAD_RS] = BIT(4);
 }
 
 static void saturn_diy_8bitdo(struct raw_src_mapping *map) {
@@ -121,6 +157,22 @@ static void gc_diy_8bitdo(struct raw_src_mapping *map) {
     map->btns_mask[PAD_LS] = 0;
 }
 
+static void gc_gbros_8bitdo(struct raw_src_mapping *map) {
+    map->mask[0] = 0xFF5F0FFF;
+    map->desc[0] = 0x110000FF;
+
+    uint32_t tmp = map->btns_mask[PAD_RB_LEFT];
+    map->btns_mask[PAD_RB_LEFT] = map->btns_mask[PAD_RB_RIGHT];
+    map->btns_mask[PAD_RB_RIGHT] = tmp;
+    map->btns_mask[PAD_LT] = map->btns_mask[PAD_LS];
+    map->btns_mask[PAD_RT] = map->btns_mask[PAD_RS];
+    map->btns_mask[PAD_RS] = map->btns_mask[PAD_MS];
+    map->btns_mask[PAD_MS] = 0;
+    map->btns_mask[PAD_LM] = 0;
+    map->btns_mask[PAD_RM] = 0;
+    map->btns_mask[PAD_LS] = 0;
+}
+
 static void n64_bluen64(struct raw_src_mapping *map) {
     map->mask[0] = 0x23150FFF;
     map->desc[0] = 0x000000FF;
@@ -143,47 +195,6 @@ static void rf_warrior(struct raw_src_mapping *map) {
     map->btns_mask[PAD_RM] = BIT(5);
     map->btns_mask[PAD_RS] = BIT(6);
     map->btns_mask[PAD_MS] = 0;
-}
-
-enum {
-    STADIA_CAPTURE = 0,
-    STADIA_ASSISTANT,
-    STADIA_LT_L2,
-    STADIA_RT_R2,
-    STADIA_STADIA,
-    STADIA_MENU,
-    STADIA_OPTIONS,
-    STADIA_R3,
-    STADIA_L3,
-    STADIA_RB_R1,
-    STADIA_LB_L1,
-    STADIA_Y,
-    STADIA_X,
-    STADIA_B,
-    STADIA_A,
-};
-
-static void stadia(struct raw_src_mapping *map) {
-    map->mask[0] = 0xBBFF1FFF;
-    map->desc[0] = 0x110000FF;
-
-    memset(map->btns_mask, 0, sizeof(map->btns_mask));
-
-    map->btns_mask[PAD_RD_LEFT] = BIT(STADIA_CAPTURE);
-    map->btns_mask[PAD_RB_LEFT] = BIT(STADIA_X);
-    map->btns_mask[PAD_RB_RIGHT] = BIT(STADIA_B);
-    map->btns_mask[PAD_RB_DOWN] = BIT(STADIA_A);
-    map->btns_mask[PAD_RB_UP] = BIT(STADIA_Y);
-    map->btns_mask[PAD_MM] = BIT(STADIA_MENU);
-    map->btns_mask[PAD_MS] = BIT(STADIA_OPTIONS);
-    map->btns_mask[PAD_MT] = BIT(STADIA_STADIA);
-    map->btns_mask[PAD_MQ] = BIT(STADIA_ASSISTANT);
-    map->btns_mask[PAD_LM] = 0;
-    map->btns_mask[PAD_LS] = BIT(STADIA_LB_L1);
-    map->btns_mask[PAD_LJ] = BIT(STADIA_L3);
-    map->btns_mask[PAD_RM] = 0;
-    map->btns_mask[PAD_RS] = BIT(STADIA_RB_R1);
-    map->btns_mask[PAD_RJ] = BIT(STADIA_R3);
 }
 
 enum {
@@ -225,7 +236,13 @@ static void ouya(struct raw_src_mapping *map) {
     map->btns_mask[PAD_RJ] = BIT(OUYA_R3);
 }
 
+static void mapping_quirks_apply_pnp(struct bt_data *bt_data) {
+    switch (bt_data->base.vid) {
+    }
+}
+
 void mapping_quirks_apply(struct bt_data *bt_data) {
+    mapping_quirks_apply_pnp(bt_data);
     if (atomic_test_bit(&bt_data->base.flags[PAD], BT_QUIRK_FACE_BTNS_INVERT)) {
         face_btns_invert(&bt_data->raw_src_mappings[PAD]);
     }
@@ -234,6 +251,9 @@ void mapping_quirks_apply(struct bt_data *bt_data) {
     }
     if (atomic_test_bit(&bt_data->base.flags[PAD], BT_QUIRK_FACE_BTNS_TRIGGER_TO_6BUTTONS)) {
         face_btns_trigger_to_6buttons(&bt_data->raw_src_mappings[PAD]);
+    }
+    if (bt_data->base.vid == 0x045E && atomic_test_bit(&bt_data->base.flags[PAD], BT_QUIRK_FACE_BTNS_TRIGGER_TO_8BUTTONS)) {
+        face_btns_trigger_to_8buttons(&bt_data->raw_src_mappings[PAD]);
     }
     if (atomic_test_bit(&bt_data->base.flags[PAD], BT_QUIRK_TRIGGER_PRI_SEC_INVERT)) {
         trigger_pri_sec_invert(&bt_data->raw_src_mappings[PAD]);
@@ -247,6 +267,9 @@ void mapping_quirks_apply(struct bt_data *bt_data) {
     if (atomic_test_bit(&bt_data->base.flags[PAD], BT_QUIRK_8BITDO_M30)) {
         m30_8bitdo(&bt_data->raw_src_mappings[PAD]);
     }
+    if (atomic_test_bit(&bt_data->base.flags[PAD], BT_QUIRK_8BITDO_M30_MODKIT)) {
+        m30_8bitdo_modkit(&bt_data->raw_src_mappings[PAD]);
+    }
     if (atomic_test_bit(&bt_data->base.flags[PAD], BT_QUIRK_8BITDO_SATURN)) {
         saturn_diy_8bitdo(&bt_data->raw_src_mappings[PAD]);
     }
@@ -256,13 +279,13 @@ void mapping_quirks_apply(struct bt_data *bt_data) {
     if (atomic_test_bit(&bt_data->base.flags[PAD], BT_QUIRK_RF_WARRIOR)) {
         rf_warrior(&bt_data->raw_src_mappings[PAD]);
     }
-    if (atomic_test_bit(&bt_data->base.flags[PAD], BT_QUIRK_STADIA)) {
-        stadia(&bt_data->raw_src_mappings[PAD]);
-    }
     if (atomic_test_bit(&bt_data->base.flags[PAD], BT_QUIRK_OUYA)) {
         ouya(&bt_data->raw_src_mappings[PAD]);
     }
     if (atomic_test_bit(&bt_data->base.flags[PAD], BT_QUIRK_8BITDO_GC)) {
         gc_diy_8bitdo(&bt_data->raw_src_mappings[PAD]);
+    }
+    if (atomic_test_bit(&bt_data->base.flags[PAD], BT_QUIRK_8BITDO_GBROS)) {
+        gc_gbros_8bitdo(&bt_data->raw_src_mappings[PAD]);
     }
 }

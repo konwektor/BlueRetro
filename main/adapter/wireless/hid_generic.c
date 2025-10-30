@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2023, Jacques Gagnon
+ * Copyright (c) 2019-2025, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,9 +9,11 @@
 #include "zephyr/types.h"
 #include "zephyr/usb_hid.h"
 #include "tools/util.h"
+#include "tests/cmds.h"
 #include "hid_generic.h"
 #include "adapter/mapping_quirks.h"
 #include "adapter/hid_parser.h"
+#include "bluetooth/mon.h"
 
 /* dinput buttons */
 enum {
@@ -34,10 +36,8 @@ enum {
 
 struct hid_report_meta {
     int8_t hid_btn_idx;
-    int8_t hid_axes_idx[ADAPTER_MAX_AXES];
     int8_t hid_hat_idx;
     uint8_t kb_bitfield;
-    struct ctrl_meta hid_axes_meta[ADAPTER_MAX_AXES];
 };
 
 struct hid_reports_meta {
@@ -79,19 +79,27 @@ static const uint32_t hid_kb_key_to_generic[] = {
     KB_KP_8, KB_KP_9, KB_KP_0, KB_KP_DOT,
 };
 
-static const uint32_t hid_pad_default_btns_mask[32] = {
-    0, 0, 0, 0,
-    0, 0, 0, 0,
-    0, 0, 0, 0,
-    0, BIT(HID_Z), 0, BIT(HID_C),
-    BIT(HID_X), BIT(HID_B), BIT(HID_A), BIT(HID_Y),
-    BIT(HID_START), BIT(HID_SELECT), BIT(HID_MENU), 0,
-    BIT(HID_L), BIT(HID_LB), 0, BIT(HID_LJ),
-    BIT(HID_R), BIT(HID_RB), 0, BIT(HID_RJ),
+static const uint32_t hid_pad_default_btns_idx[32] = {
+    PAD_RB_DOWN, PAD_RB_RIGHT, PAD_RT,
+    PAD_RB_LEFT, PAD_RB_UP, PAD_LT,
+    PAD_LS, PAD_RS,
+    PAD_LM, PAD_RM,
+    PAD_MS, PAD_MM, PAD_MT,
+    PAD_LJ, PAD_RJ,
+    PAD_MQ,
+    PAD_RD_LEFT, PAD_RD_RIGHT, PAD_RD_DOWN, PAD_RD_UP,
+};
+
+static const uint32_t hid_pad_xinput_btns_idx[32] = {
+    PAD_RB_DOWN, PAD_RB_RIGHT,
+    PAD_RB_LEFT, PAD_RB_UP,
+    PAD_LS, PAD_RS,
+    PAD_MS, PAD_MM,
+    PAD_LJ, PAD_RJ,
 };
 
 static void hid_kb_init(struct hid_report_meta *meta, struct hid_report *report, struct raw_src_mapping *map) {
-    memset(meta->hid_axes_idx, -1, sizeof(meta->hid_axes_idx));
+    memset(map->axes_idx, -1, sizeof(map->axes_idx));
     meta->hid_btn_idx = -1;
 
     for (uint32_t i = 0; i < report->usage_cnt; i++) {
@@ -109,7 +117,7 @@ static void hid_kb_init(struct hid_report_meta *meta, struct hid_report *report,
                     meta->hid_btn_idx = i;
                 }
                 else if (key_idx < 6) {
-                    meta->hid_axes_idx[key_idx] = i;
+                    map->axes_idx[key_idx] = i;
                     key_idx++;
                 }
                 break;
@@ -123,10 +131,13 @@ static void hid_kb_init(struct hid_report_meta *meta, struct hid_report *report,
 
 static void hid_kb_to_generic(struct bt_data *bt_data, struct wireless_ctrl *ctrl_data) {
     struct hid_report_meta *meta = &devices_meta[bt_data->base.pids->id].reports_meta[KB];
+    struct raw_src_mapping *map = &bt_data->raw_src_mappings[KB];
+
+    TESTS_CMDS_LOG("\"wireless_input\": {\"report_id\": %ld", bt_data->base.report_id);
 
     if (!atomic_test_bit(&bt_data->base.flags[KB], BT_INIT)) {
         hid_parser_load_report(bt_data, bt_data->base.report_id);
-        hid_kb_init(meta, &bt_data->reports[KB], &bt_data->raw_src_mappings[KB]);
+        hid_kb_init(meta, bt_data->reports[KB], &bt_data->raw_src_mappings[KB]);
         atomic_set_bit(&bt_data->base.flags[KB], BT_INIT);
     }
 
@@ -136,12 +147,14 @@ static void hid_kb_to_generic(struct bt_data *bt_data, struct wireless_ctrl *ctr
     ctrl_data->desc = (uint32_t *)bt_data->raw_src_mappings[KB].desc;
 
     if (meta->hid_btn_idx > -1) {
-        uint32_t len = bt_data->reports[KB].usages[meta->hid_btn_idx].bit_size;
-        uint32_t offset = bt_data->reports[KB].usages[meta->hid_btn_idx].bit_offset;
+        uint32_t len = bt_data->reports[KB]->usages[meta->hid_btn_idx].bit_size;
+        uint32_t offset = bt_data->reports[KB]->usages[meta->hid_btn_idx].bit_offset;
         uint32_t mask = (1ULL << len) - 1;
         uint32_t byte_offset = offset / 8;
         uint32_t bit_shift = offset % 8;
         uint32_t buttons = ((*(uint32_t *)(bt_data->base.input + byte_offset)) >> bit_shift) & mask;
+
+        TESTS_CMDS_LOG(", \"modifiers\": %lu", buttons);
 
         for (uint8_t i = 0, mask = 1; mask; i++, mask <<= 1) {
             if (buttons & mask) {
@@ -151,19 +164,25 @@ static void hid_kb_to_generic(struct bt_data *bt_data, struct wireless_ctrl *ctr
     }
 
     if (meta->kb_bitfield) {
-        for (uint32_t i = 0; i < sizeof(meta->hid_axes_idx); i++) {
-            if (meta->hid_axes_idx[i] > -1) {
-                int32_t len = bt_data->reports[KB].usages[meta->hid_axes_idx[i]].bit_size;
-                uint32_t offset = bt_data->reports[KB].usages[meta->hid_axes_idx[i]].bit_offset;
+        TESTS_CMDS_LOG(", \"keys\": [");
+        for (uint32_t i = 0; i < ADAPTER_PS2_MAX_AXES; i++) {
+            if (map->axes_idx[i] > -1) {
+                int32_t len = bt_data->reports[KB]->usages[map->axes_idx[i]].bit_size;
+                uint32_t offset = bt_data->reports[KB]->usages[map->axes_idx[i]].bit_offset;
                 uint32_t mask = (1ULL << len) - 1;
                 uint32_t byte_offset = offset / 8;
                 uint32_t bit_shift = offset % 8;
                 uint32_t key_field = ((*(uint32_t *)(bt_data->base.input + byte_offset)) >> bit_shift) & mask;
 
+                if (i) {
+                    TESTS_CMDS_LOG(", ");
+                }
+                TESTS_CMDS_LOG("%lu", key_field);
+
                 for (uint32_t mask = 1; mask; mask <<= 1) {
                     uint32_t key = __builtin_ffs(key_field & mask);
                     if (key) {
-                        key = key - 1 + bt_data->reports[KB].usages[meta->hid_axes_idx[i]].usage;
+                        key = key - 1 + bt_data->reports[KB]->usages[map->axes_idx[i]].usage;
                         ctrl_data->btns[(hid_kb_key_to_generic[key] >> 5)].value |= BIT(hid_kb_key_to_generic[key] & 0x1F);
                     }
                 }
@@ -171,14 +190,20 @@ static void hid_kb_to_generic(struct bt_data *bt_data, struct wireless_ctrl *ctr
         }
     }
     else {
-        for (uint32_t i = 0; i < sizeof(meta->hid_axes_idx); i++) {
-            if (meta->hid_axes_idx[i] > -1) {
-                int32_t len = bt_data->reports[KB].usages[meta->hid_axes_idx[i]].bit_size;
-                uint32_t offset = bt_data->reports[KB].usages[meta->hid_axes_idx[i]].bit_offset;
+        TESTS_CMDS_LOG(", \"keys\": [");
+        for (uint32_t i = 0; i < ADAPTER_PS2_MAX_AXES; i++) {
+            if (map->axes_idx[i] > -1) {
+                int32_t len = bt_data->reports[KB]->usages[map->axes_idx[i]].bit_size;
+                uint32_t offset = bt_data->reports[KB]->usages[map->axes_idx[i]].bit_offset;
                 uint32_t mask = (1ULL << len) - 1;
                 uint32_t byte_offset = offset / 8;
                 uint32_t bit_shift = offset % 8;
                 uint32_t key = ((*(uint32_t *)(bt_data->base.input + byte_offset)) >> bit_shift) & mask;
+
+                if (i) {
+                    TESTS_CMDS_LOG(", ");
+                }
+                TESTS_CMDS_LOG("%lu", key);
 
                 if (key > 3 && key < ARRAY_SIZE(hid_kb_key_to_generic)) {
                     ctrl_data->btns[(hid_kb_key_to_generic[key] >> 5)].value |= BIT(hid_kb_key_to_generic[key] & 0x1F);
@@ -186,10 +211,11 @@ static void hid_kb_to_generic(struct bt_data *bt_data, struct wireless_ctrl *ctr
             }
         }
     }
+    TESTS_CMDS_LOG("]},\n");
 }
 
 static void hid_mouse_init(struct hid_report_meta *meta, struct hid_report *report, struct raw_src_mapping *map) {
-    memset(meta->hid_axes_idx, -1, sizeof(meta->hid_axes_idx));
+    memset(map->axes_idx, -1, sizeof(map->axes_idx));
     meta->hid_btn_idx = -1;
 
     for (uint32_t i = 0; i < report->usage_cnt; i++) {
@@ -199,31 +225,37 @@ static void hid_mouse_init(struct hid_report_meta *meta, struct hid_report *repo
                     case USAGE_GEN_DESKTOP_X:
                         map->mask[0] |= BIT(MOUSE_X_LEFT) | BIT(MOUSE_X_RIGHT);
                         map->desc[0] |= BIT(MOUSE_X_LEFT) | BIT(MOUSE_X_RIGHT);
-                        meta->hid_axes_idx[AXIS_RX] = i;
-                        meta->hid_axes_meta[AXIS_RX].neutral = 0;
-                        meta->hid_axes_meta[AXIS_RX].abs_max = report->usages[i].logical_max;
-                        meta->hid_axes_meta[AXIS_RX].abs_min = report->usages[i].logical_min;
-                        meta->hid_axes_meta[AXIS_RX].relative = 1;
+                        map->axes_idx[AXIS_RX] = i;
+                        map->meta[AXIS_RX].neutral = 0;
+                        map->meta[AXIS_RX].abs_max = report->usages[i].logical_max;
+                        map->meta[AXIS_RX].abs_min = report->usages[i].logical_min;
+                        map->meta[AXIS_RX].relative = 1;
                         break;
                     case USAGE_GEN_DESKTOP_Y:
                         map->mask[0] |= BIT(MOUSE_Y_DOWN) | BIT(MOUSE_Y_UP);
                         map->desc[0] |= BIT(MOUSE_Y_DOWN) | BIT(MOUSE_Y_UP);
-                        meta->hid_axes_idx[AXIS_RY] = i;
-                        meta->hid_axes_meta[AXIS_RY].neutral = 0;
-                        meta->hid_axes_meta[AXIS_RY].abs_max = report->usages[i].logical_max;
-                        meta->hid_axes_meta[AXIS_RY].abs_min = report->usages[i].logical_min;
-                        meta->hid_axes_meta[AXIS_RY].polarity = 1;
-                        meta->hid_axes_meta[AXIS_RY].relative = 1;
+                        map->axes_idx[AXIS_RY] = i;
+                        map->meta[AXIS_RY].neutral = 0;
+                        map->meta[AXIS_RY].abs_max = report->usages[i].logical_max;
+                        map->meta[AXIS_RY].abs_min = report->usages[i].logical_min;
+                        map->meta[AXIS_RY].polarity = 1;
+                        map->meta[AXIS_RY].relative = 1;
                         break;
                     case USAGE_GEN_DESKTOP_WHEEL:
                         map->mask[0] |= BIT(MOUSE_WY_DOWN) | BIT(MOUSE_WY_UP);
                         map->desc[0] |= BIT(MOUSE_WY_DOWN) | BIT(MOUSE_WY_UP);
-                        meta->hid_axes_idx[AXIS_LY] = i;
-                        meta->hid_axes_meta[AXIS_LY].neutral = 0;
-                        meta->hid_axes_meta[AXIS_LY].abs_max = report->usages[i].logical_max;
-                        meta->hid_axes_meta[AXIS_LY].abs_min = report->usages[i].logical_min;
-                        meta->hid_axes_meta[AXIS_LY].polarity = 1;
-                        meta->hid_axes_meta[AXIS_LY].relative = 1;
+                        map->axes_idx[AXIS_LY] = i;
+                        map->meta[AXIS_LY].neutral = 0;
+                        map->meta[AXIS_LY].abs_max = report->usages[i].logical_max;
+                        map->meta[AXIS_LY].abs_min = report->usages[i].logical_min;
+                        map->meta[AXIS_LY].polarity = 1;
+                        map->meta[AXIS_LY].relative = 1;
+                        break;
+                    case 0x85: /* Sys Main Menu */
+                        /* Hack for xinput Xbox btn */
+                        meta->hid_btn_idx = i;
+                        map->mask[0] |= BIT(PAD_MT);
+                        map->btns_mask[PAD_MT] = BIT(0);
                         break;
                 }
                 break;
@@ -260,10 +292,12 @@ static void hid_mouse_init(struct hid_report_meta *meta, struct hid_report *repo
 
 static void hid_mouse_to_generic(struct bt_data *bt_data, struct wireless_ctrl *ctrl_data) {
     struct hid_report_meta *meta = &devices_meta[bt_data->base.pids->id].reports_meta[MOUSE];
+    struct ctrl_meta *ctrl_meta = bt_data->raw_src_mappings[MOUSE].meta;
+    struct raw_src_mapping *map = &bt_data->raw_src_mappings[MOUSE];
 
     if (!atomic_test_bit(&bt_data->base.flags[MOUSE], BT_INIT)) {
         hid_parser_load_report(bt_data, bt_data->base.report_id);
-        hid_mouse_init(meta, &bt_data->reports[MOUSE], &bt_data->raw_src_mappings[MOUSE]);
+        hid_mouse_init(meta, bt_data->reports[MOUSE], &bt_data->raw_src_mappings[MOUSE]);
         atomic_set_bit(&bt_data->base.flags[MOUSE], BT_INIT);
     }
 
@@ -273,8 +307,8 @@ static void hid_mouse_to_generic(struct bt_data *bt_data, struct wireless_ctrl *
     ctrl_data->desc = (uint32_t *)bt_data->raw_src_mappings[MOUSE].desc;
 
     if (meta->hid_btn_idx > -1) {
-        uint32_t len = bt_data->reports[MOUSE].usages[meta->hid_btn_idx].bit_size;
-        uint32_t offset = bt_data->reports[MOUSE].usages[meta->hid_btn_idx].bit_offset;
+        uint32_t len = bt_data->reports[MOUSE]->usages[meta->hid_btn_idx].bit_size;
+        uint32_t offset = bt_data->reports[MOUSE]->usages[meta->hid_btn_idx].bit_offset;
         uint32_t mask = (1ULL << len) - 1;
         uint32_t byte_offset = offset / 8;
         uint32_t bit_shift = offset % 8;
@@ -288,14 +322,14 @@ static void hid_mouse_to_generic(struct bt_data *bt_data, struct wireless_ctrl *
     }
 
     for (uint32_t i = 0; i < ADAPTER_MAX_AXES; i++) {
-        if (meta->hid_axes_idx[i] > -1) {
-            int32_t len = bt_data->reports[MOUSE].usages[meta->hid_axes_idx[i]].bit_size;
-            uint32_t offset = bt_data->reports[MOUSE].usages[meta->hid_axes_idx[i]].bit_offset;
+        if (map->axes_idx[i] > -1) {
+            int32_t len = bt_data->reports[MOUSE]->usages[map->axes_idx[i]].bit_size;
+            uint32_t offset = bt_data->reports[MOUSE]->usages[map->axes_idx[i]].bit_offset;
             uint32_t mask = (1ULL << len) - 1;
             uint32_t byte_offset = offset / 8;
             uint32_t bit_shift = offset % 8;
 
-            ctrl_data->axes[i].meta = &meta->hid_axes_meta[i];
+            ctrl_data->axes[i].meta = &ctrl_meta[i];
             ctrl_data->axes[i].value = ((*(uint32_t *)(bt_data->base.input + byte_offset)) >> bit_shift) & mask;
             if (ctrl_data->axes[i].value & BIT(len - 1)) {
                 ctrl_data->axes[i].value |= ~mask;
@@ -305,8 +339,10 @@ static void hid_mouse_to_generic(struct bt_data *bt_data, struct wireless_ctrl *
 }
 
 static void hid_pad_init(struct hid_report_meta *meta, struct hid_report *report, struct raw_src_mapping *map) {
+    bool btns_is_xinput = 0;
     uint32_t z_is_joy = 0;
-    memset(meta->hid_axes_idx, -1, sizeof(meta->hid_axes_idx));
+    int8_t hid_cbtn_idx = -1;
+    memset(map->axes_idx, -1, sizeof(map->axes_idx));
     meta->hid_btn_idx = -1;
     meta->hid_hat_idx = -1;
 
@@ -328,6 +364,19 @@ static void hid_pad_init(struct hid_report_meta *meta, struct hid_report *report
         }
     }
 
+    btns_is_xinput = (
+        report->usage_cnt == 8 &&
+        report->usages[0].usage_page == USAGE_GEN_DESKTOP && report->usages[0].usage == USAGE_GEN_DESKTOP_X &&
+        report->usages[1].usage_page == USAGE_GEN_DESKTOP && report->usages[1].usage == USAGE_GEN_DESKTOP_Y &&
+        report->usages[2].usage_page == USAGE_GEN_DESKTOP && report->usages[2].usage == 0x33 &&
+        report->usages[3].usage_page == USAGE_GEN_DESKTOP && report->usages[3].usage == 0x34 &&
+        report->usages[4].usage_page == USAGE_GEN_DESKTOP && report->usages[4].usage == 0x32 &&
+        report->usages[5].usage_page == USAGE_GEN_DESKTOP && report->usages[5].usage == 0x35 &&
+        report->usages[6].usage_page == USAGE_GEN_DESKTOP && report->usages[6].usage == 0x39 &&
+        report->usages[7].usage_page == USAGE_GEN_BUTTON &&
+        report->usages[7].usage == 0x01 && report->usages[7].usage_max == 0x0A
+    );
+
     /* Build mask, desc, idx and meta base on usage */
     for (uint32_t i = 0; i < report->usage_cnt; i++) {
         switch (report->usages[i].usage_page) {
@@ -336,134 +385,122 @@ static void hid_pad_init(struct hid_report_meta *meta, struct hid_report *report
                     case USAGE_GEN_DESKTOP_X:
                         map->mask[0] |= BIT(PAD_LX_LEFT) | BIT(PAD_LX_RIGHT);
                         map->desc[0] |= BIT(PAD_LX_LEFT) | BIT(PAD_LX_RIGHT);
-                        meta->hid_axes_idx[AXIS_LX] = i;
+                        map->axes_idx[AXIS_LX] = i;
                         if (report->usages[i].logical_min >= 0) {
-                            meta->hid_axes_meta[AXIS_LX].neutral = report->usages[i].logical_max / 2;
-                            meta->hid_axes_meta[AXIS_LX].abs_max = report->usages[i].logical_max - meta->hid_axes_meta[AXIS_LX].neutral;
-                            meta->hid_axes_meta[AXIS_LX].abs_min = meta->hid_axes_meta[AXIS_LX].neutral - report->usages[i].logical_min;
+                            map->meta[AXIS_LX].neutral = (report->usages[i].logical_max / 2) + 1;
                         }
                         else {
-                            meta->hid_axes_meta[AXIS_LX].neutral = 0;
-                            meta->hid_axes_meta[AXIS_LX].abs_max = report->usages[i].logical_max;
-                            meta->hid_axes_meta[AXIS_LX].abs_min = report->usages[i].logical_min;
+                            map->meta[AXIS_LX].neutral = 0;
                         }
+                        map->meta[AXIS_LX].abs_max = report->usages[i].logical_max - map->meta[AXIS_LX].neutral;
+                        map->meta[AXIS_LX].abs_min = map->meta[AXIS_LX].neutral - report->usages[i].logical_min;
                         break;
                     case USAGE_GEN_DESKTOP_Y:
                         map->mask[0] |= BIT(PAD_LY_DOWN) | BIT(PAD_LY_UP);
                         map->desc[0] |= BIT(PAD_LY_DOWN) | BIT(PAD_LY_UP);
-                        meta->hid_axes_idx[AXIS_LY] = i;
+                        map->axes_idx[AXIS_LY] = i;
                         if (report->usages[i].logical_min >= 0) {
-                            meta->hid_axes_meta[AXIS_LY].neutral = report->usages[i].logical_max / 2;
-                            meta->hid_axes_meta[AXIS_LY].abs_max = report->usages[i].logical_max - meta->hid_axes_meta[AXIS_LY].neutral;
-                            meta->hid_axes_meta[AXIS_LY].abs_min = meta->hid_axes_meta[AXIS_LY].neutral - report->usages[i].logical_min;
+                            map->meta[AXIS_LY].neutral = (report->usages[i].logical_max / 2) + 1;
                         }
                         else {
-                            meta->hid_axes_meta[AXIS_LY].neutral = 0;
-                            meta->hid_axes_meta[AXIS_LY].abs_max = report->usages[i].logical_max;
-                            meta->hid_axes_meta[AXIS_LY].abs_min = report->usages[i].logical_min;
+                            map->meta[AXIS_LY].neutral = 0;
                         }
-                        meta->hid_axes_meta[AXIS_LY].polarity = 1;
+                        map->meta[AXIS_LY].abs_max = report->usages[i].logical_max - map->meta[AXIS_LY].neutral;
+                        map->meta[AXIS_LY].abs_min = map->meta[AXIS_LY].neutral - report->usages[i].logical_min;
+                        map->meta[AXIS_LY].polarity = 1;
                         break;
                     case 0x32 /* USAGE_GEN_DESKTOP_Z */:
                         if (z_is_joy) {
                             map->mask[0] |= BIT(PAD_RX_LEFT) | BIT(PAD_RX_RIGHT);
                             map->desc[0] |= BIT(PAD_RX_LEFT) | BIT(PAD_RX_RIGHT);
-                            meta->hid_axes_idx[AXIS_RX] = i;
+                            map->axes_idx[AXIS_RX] = i;
                             if (report->usages[i].logical_min >= 0) {
-                                meta->hid_axes_meta[AXIS_RX].neutral = report->usages[i].logical_max / 2;
-                                meta->hid_axes_meta[AXIS_RX].abs_max = report->usages[i].logical_max - meta->hid_axes_meta[AXIS_RX].neutral;
-                                meta->hid_axes_meta[AXIS_RX].abs_min = meta->hid_axes_meta[AXIS_RX].neutral - report->usages[i].logical_min;
+                                map->meta[AXIS_RX].neutral = (report->usages[i].logical_max / 2) + 1;
                             }
                             else {
-                                meta->hid_axes_meta[AXIS_RX].neutral = 0;
-                                meta->hid_axes_meta[AXIS_RX].abs_max = report->usages[i].logical_max;
-                                meta->hid_axes_meta[AXIS_RX].abs_min = report->usages[i].logical_min;
+                                map->meta[AXIS_RX].neutral = 0;
                             }
+                            map->meta[AXIS_RX].abs_max = report->usages[i].logical_max - map->meta[AXIS_RX].neutral;
+                            map->meta[AXIS_RX].abs_min = map->meta[AXIS_RX].neutral - report->usages[i].logical_min;
                         }
                         else {
                             map->mask[0] |= BIT(PAD_LM);
                             map->desc[0] |= BIT(PAD_LM);
-                            meta->hid_axes_idx[TRIG_L] = i;
-                            meta->hid_axes_meta[TRIG_L].abs_max = report->usages[i].logical_max;
-                            meta->hid_axes_meta[TRIG_L].abs_min = report->usages[i].logical_min;
-                            meta->hid_axes_meta[TRIG_L].neutral = report->usages[i].logical_min;
+                            map->axes_idx[TRIG_L] = i;
+                            map->meta[TRIG_L].abs_max = report->usages[i].logical_max;
+                            map->meta[TRIG_L].abs_min = report->usages[i].logical_min;
+                            map->meta[TRIG_L].neutral = report->usages[i].logical_min;
                         }
                         break;
                     case 0x33 /* USAGE_GEN_DESKTOP_RX */:
                         if (z_is_joy) {
                             map->mask[0] |= BIT(PAD_LM);
                             map->desc[0] |= BIT(PAD_LM);
-                            meta->hid_axes_idx[TRIG_L] = i;
-                            meta->hid_axes_meta[TRIG_L].abs_max = report->usages[i].logical_max;
-                            meta->hid_axes_meta[TRIG_L].abs_min = report->usages[i].logical_min;
-                            meta->hid_axes_meta[TRIG_L].neutral = report->usages[i].logical_min;
+                            map->axes_idx[TRIG_L] = i;
+                            map->meta[TRIG_L].abs_max = report->usages[i].logical_max;
+                            map->meta[TRIG_L].abs_min = report->usages[i].logical_min;
+                            map->meta[TRIG_L].neutral = report->usages[i].logical_min;
                         }
                         else {
                             map->mask[0] |= BIT(PAD_RX_LEFT) | BIT(PAD_RX_RIGHT);
                             map->desc[0] |= BIT(PAD_RX_LEFT) | BIT(PAD_RX_RIGHT);
-                            meta->hid_axes_idx[AXIS_RX] = i;
+                            map->axes_idx[AXIS_RX] = i;
                             if (report->usages[i].logical_min >= 0) {
-                                meta->hid_axes_meta[AXIS_RX].neutral = report->usages[i].logical_max / 2;
-                                meta->hid_axes_meta[AXIS_RX].abs_max = report->usages[i].logical_max - meta->hid_axes_meta[AXIS_RX].neutral;
-                                meta->hid_axes_meta[AXIS_RX].abs_min = meta->hid_axes_meta[AXIS_RX].neutral - report->usages[i].logical_min;
+                                map->meta[AXIS_RX].neutral = (report->usages[i].logical_max / 2) + 1;
                             }
                             else {
-                                meta->hid_axes_meta[AXIS_RX].neutral = 0;
-                                meta->hid_axes_meta[AXIS_RX].abs_max = report->usages[i].logical_max;
-                                meta->hid_axes_meta[AXIS_RX].abs_min = report->usages[i].logical_min;
+                                map->meta[AXIS_RX].neutral = 0;
                             }
+                            map->meta[AXIS_RX].abs_max = report->usages[i].logical_max - map->meta[AXIS_RX].neutral;
+                            map->meta[AXIS_RX].abs_min = map->meta[AXIS_RX].neutral - report->usages[i].logical_min;
                         }
                         break;
                     case 0x34 /* USAGE_GEN_DESKTOP_RY */:
                         if (z_is_joy) {
                             map->mask[0] |= BIT(PAD_RM);
                             map->desc[0] |= BIT(PAD_RM);
-                            meta->hid_axes_idx[TRIG_R] = i;
-                            meta->hid_axes_meta[TRIG_R].abs_max = report->usages[i].logical_max;
-                            meta->hid_axes_meta[TRIG_R].abs_min = report->usages[i].logical_min;
-                            meta->hid_axes_meta[TRIG_R].neutral = report->usages[i].logical_min;
+                            map->axes_idx[TRIG_R] = i;
+                            map->meta[TRIG_R].abs_max = report->usages[i].logical_max;
+                            map->meta[TRIG_R].abs_min = report->usages[i].logical_min;
+                            map->meta[TRIG_R].neutral = report->usages[i].logical_min;
                         }
                         else {
                             map->mask[0] |= BIT(PAD_RY_DOWN) | BIT(PAD_RY_UP);
                             map->desc[0] |= BIT(PAD_RY_DOWN) | BIT(PAD_RY_UP);
-                            meta->hid_axes_idx[AXIS_RY] = i;
+                            map->axes_idx[AXIS_RY] = i;
                             if (report->usages[i].logical_min >= 0) {
-                                meta->hid_axes_meta[AXIS_RY].neutral = report->usages[i].logical_max / 2;
-                                meta->hid_axes_meta[AXIS_RY].abs_max = report->usages[i].logical_max - meta->hid_axes_meta[AXIS_RY].neutral;
-                                meta->hid_axes_meta[AXIS_RY].abs_min = meta->hid_axes_meta[AXIS_RY].neutral - report->usages[i].logical_min;
+                                map->meta[AXIS_RY].neutral = (report->usages[i].logical_max / 2) + 1;
                             }
                             else {
-                                meta->hid_axes_meta[AXIS_RY].neutral = 0;
-                                meta->hid_axes_meta[AXIS_RY].abs_max = report->usages[i].logical_max;
-                                meta->hid_axes_meta[AXIS_RY].abs_min = report->usages[i].logical_min;
+                                map->meta[AXIS_RY].neutral = 0;
                             }
-                            meta->hid_axes_meta[AXIS_RY].polarity = 1;
+                            map->meta[AXIS_RY].abs_max = report->usages[i].logical_max - map->meta[AXIS_RY].neutral;
+                            map->meta[AXIS_RY].abs_min = map->meta[AXIS_RY].neutral - report->usages[i].logical_min;
+                            map->meta[AXIS_RY].polarity = 1;
                         }
                         break;
                     case 0x35 /* USAGE_GEN_DESKTOP_RZ */:
                         if (z_is_joy) {
                             map->mask[0] |= BIT(PAD_RY_DOWN) | BIT(PAD_RY_UP);
                             map->desc[0] |= BIT(PAD_RY_DOWN) | BIT(PAD_RY_UP);
-                            meta->hid_axes_idx[AXIS_RY] = i;
+                            map->axes_idx[AXIS_RY] = i;
                             if (report->usages[i].logical_min >= 0) {
-                                meta->hid_axes_meta[AXIS_RY].neutral = report->usages[i].logical_max / 2;
-                                meta->hid_axes_meta[AXIS_RY].abs_max = report->usages[i].logical_max - meta->hid_axes_meta[AXIS_RY].neutral;
-                                meta->hid_axes_meta[AXIS_RY].abs_min = meta->hid_axes_meta[AXIS_RY].neutral - report->usages[i].logical_min;
+                                map->meta[AXIS_RY].neutral = (report->usages[i].logical_max / 2) + 1;
                             }
                             else {
-                                meta->hid_axes_meta[AXIS_RY].neutral = 0;
-                                meta->hid_axes_meta[AXIS_RY].abs_max = report->usages[i].logical_max;
-                                meta->hid_axes_meta[AXIS_RY].abs_min = report->usages[i].logical_min;
+                                map->meta[AXIS_RY].neutral = 0;
                             }
-                            meta->hid_axes_meta[AXIS_RY].polarity = 1;
+                            map->meta[AXIS_RY].abs_max = report->usages[i].logical_max - map->meta[AXIS_RY].neutral;
+                            map->meta[AXIS_RY].abs_min = map->meta[AXIS_RY].neutral - report->usages[i].logical_min;
+                            map->meta[AXIS_RY].polarity = 1;
                         }
                         else {
                             map->mask[0] |= BIT(PAD_RM);
                             map->desc[0] |= BIT(PAD_RM);
-                            meta->hid_axes_idx[TRIG_R] = i;
-                            meta->hid_axes_meta[TRIG_R].abs_max = report->usages[i].logical_max;
-                            meta->hid_axes_meta[TRIG_R].abs_min = report->usages[i].logical_min;
-                            meta->hid_axes_meta[TRIG_R].neutral = report->usages[i].logical_min;
+                            map->axes_idx[TRIG_R] = i;
+                            map->meta[TRIG_R].abs_max = report->usages[i].logical_max;
+                            map->meta[TRIG_R].abs_min = report->usages[i].logical_min;
+                            map->meta[TRIG_R].neutral = report->usages[i].logical_min;
                         }
                         break;
                     case 0x39 /* USAGE_GEN_DESKTOP_HAT */:
@@ -473,26 +510,33 @@ static void hid_pad_init(struct hid_report_meta *meta, struct hid_report *report
                 }
                 break;
             case USAGE_GEN_BUTTON:
-                meta->hid_btn_idx = i;
+                if (meta->hid_btn_idx < 0) {
+                    meta->hid_btn_idx = i;
+                }
                 break;
             case 0x02 /* USAGE_SIMS */:
                 switch (report->usages[i].usage) {
                     case 0xC4 /* USAGE_SIMS_ACCEL */:
                         map->mask[0] |= BIT(PAD_RM);
                         map->desc[0] |= BIT(PAD_RM);
-                        meta->hid_axes_idx[TRIG_R] = i;
-                        meta->hid_axes_meta[TRIG_R].abs_max = report->usages[i].logical_max;
-                        meta->hid_axes_meta[TRIG_R].abs_min = report->usages[i].logical_min;
-                        meta->hid_axes_meta[TRIG_R].neutral = report->usages[i].logical_min;
+                        map->axes_idx[TRIG_R] = i;
+                        map->meta[TRIG_R].abs_max = report->usages[i].logical_max;
+                        map->meta[TRIG_R].abs_min = report->usages[i].logical_min;
+                        map->meta[TRIG_R].neutral = report->usages[i].logical_min;
                         break;
                     case 0xC5 /* USAGE_SIMS_BRAKE */:
                         map->mask[0] |= BIT(PAD_LM);
                         map->desc[0] |= BIT(PAD_LM);
-                        meta->hid_axes_idx[TRIG_L] = i;
-                        meta->hid_axes_meta[TRIG_L].abs_max = report->usages[i].logical_max;
-                        meta->hid_axes_meta[TRIG_L].abs_min = report->usages[i].logical_min;
-                        meta->hid_axes_meta[TRIG_L].neutral = report->usages[i].logical_min;
+                        map->axes_idx[TRIG_L] = i;
+                        map->meta[TRIG_L].abs_max = report->usages[i].logical_max;
+                        map->meta[TRIG_L].abs_min = report->usages[i].logical_min;
+                        map->meta[TRIG_L].neutral = report->usages[i].logical_min;
                         break;
+                }
+                break;
+            case 0x0C: /* Consumer */
+                if (hid_cbtn_idx < 0) {
+                    hid_cbtn_idx = i;
                 }
                 break;
         }
@@ -500,57 +544,107 @@ static void hid_pad_init(struct hid_report_meta *meta, struct hid_report *report
 
     /* Add a little pull-back on axis max */
     for (uint32_t i = 0; i < ADAPTER_MAX_AXES; i++) {
-        meta->hid_axes_meta[i].abs_max *= MAX_PULL_BACK;
-        meta->hid_axes_meta[i].abs_min *= MAX_PULL_BACK;
+        map->meta[i].abs_max *= MAX_PULL_BACK;
+        map->meta[i].abs_min *= MAX_PULL_BACK;
     }
 
-    /* HID buttons order is from most important to the less in HID spec. */
-    if (meta->hid_btn_idx > -1) {
-        uint32_t hid_mask = (1 << report->usages[meta->hid_btn_idx].bit_size) - 1;
-
-        /* Use a good default for most modern controller */
-        for (uint32_t i = 12; i < ARRAY_SIZE(generic_btns_mask); i++) {
-            if (hid_pad_default_btns_mask[i] && !(map->mask[0] & BIT(i))) {
-                map->mask[0] |= BIT(i);
-                map->btns_mask[i] = hid_pad_default_btns_mask[i];
-                hid_mask &= ~hid_pad_default_btns_mask[i];
-            }
+    /* We assume here that button-like usages are all */
+    /* placed consecutively in the report. We try here to aggregate */
+    /* then all under a single button usage. */
+    int8_t btn_idx = 0;
+    uint32_t btn_offset = 0;
+    if (meta->hid_btn_idx > -1 && hid_cbtn_idx == -1) {
+        btn_idx = meta->hid_btn_idx;
+        btn_offset = report->usages[btn_idx].bit_offset;
+    }
+    else if (meta->hid_btn_idx == -1 && hid_cbtn_idx > -1) {
+        btn_idx = hid_cbtn_idx;
+        btn_offset = report->usages[btn_idx].bit_offset;
+    }
+    else if (meta->hid_btn_idx > -1 && hid_cbtn_idx > -1) {
+        btn_idx = meta->hid_btn_idx;
+        if (meta->hid_btn_idx < hid_cbtn_idx) {
+            btn_offset = report->usages[meta->hid_btn_idx].bit_offset;
         }
+        else {
+            btn_offset = report->usages[hid_cbtn_idx].bit_offset;
+        }
+    }
 
-        /* fillup what is left */
-        for (uint32_t hid_btn = 15, i = 12; hid_btn < report->usages[meta->hid_btn_idx].bit_size; hid_btn++) {
-            while (map->btns_mask[i]) {
-                i++;
-                if (i > 32) {
-                    goto fillup_end;
+    if (meta->hid_btn_idx > -1) {
+        const uint32_t *btns_idx = (btns_is_xinput) ? hid_pad_xinput_btns_idx : hid_pad_default_btns_idx;
+        uint32_t uidx = meta->hid_btn_idx;
+        uint32_t undef_usage = 15;
+        for (; report->usages[uidx].usage_page == USAGE_GEN_BUTTON; uidx++) {
+            if (report->usages[uidx].usage) {
+                uint32_t usage = report->usages[uidx].usage - 1;
+                if (usage > HID_RJ) {
+                    usage = undef_usage++;
+                }
+                for (uint32_t j = 0; j < report->usages[uidx].bit_size; j++, usage++) {
+                    map->mask[0] |= BIT(btns_idx[usage]);
+                    map->btns_mask[btns_idx[usage]] =
+                        BIT(report->usages[uidx].bit_offset - btn_offset + j);
                 }
             }
-            if (!(map->mask[0] & BIT(i))) {
-                map->mask[0] |= BIT(i);
-                map->btns_mask[i] = BIT(hid_btn);
-                hid_mask &= ~BIT(hid_btn);
+        }
+        report->usages[btn_idx].bit_size =
+            report->usages[uidx - 1].bit_offset + report->usages[uidx - 1].bit_size - btn_offset;
+    }
+    if (hid_cbtn_idx > -1) {
+        uint32_t uidx = hid_cbtn_idx;
+        for (; report->usages[uidx].usage_page == 0x0C; uidx++) {
+            if (report->usages[uidx].usage) {
+                switch (report->usages[uidx].usage) {
+                    case 0x40 /* Menu */:
+                        map->mask[0] |= BIT(PAD_MM);
+                        map->btns_mask[PAD_MM] =
+                            BIT(report->usages[uidx].bit_offset - btn_offset);
+                        break;
+                    case 0xB2 /* Record */:
+                        map->mask[0] |= BIT(PAD_MQ);
+                        map->btns_mask[PAD_MQ] =
+                            BIT(report->usages[uidx].bit_offset - btn_offset);
+                        break;
+                    case 0x223 /* AC Home */:
+                        map->mask[0] |= BIT(PAD_MT);
+                        map->btns_mask[PAD_MT] =
+                            BIT(report->usages[uidx].bit_offset - btn_offset);
+                        break;
+                    case 0x224 /* AC Back */:
+                        map->mask[0] |= BIT(PAD_MS);
+                        map->btns_mask[PAD_MS] =
+                            BIT(report->usages[uidx].bit_offset - btn_offset);
+                        break;
+                }
             }
         }
-fillup_end:
-        ;
+        uint32_t bit_size =
+            report->usages[uidx - 1].bit_offset + report->usages[uidx - 1].bit_size - btn_offset;
+        if (bit_size > report->usages[btn_idx].bit_size) {
+            report->usages[btn_idx].bit_size = bit_size;
+        }
+        if (btn_idx == hid_cbtn_idx) {
+            meta->hid_btn_idx = btn_idx;
+        }
     }
 }
 
 static void hid_pad_to_generic(struct bt_data *bt_data, struct wireless_ctrl *ctrl_data) {
     struct hid_report_meta *meta = &devices_meta[bt_data->base.pids->id].reports_meta[PAD];
+    struct ctrl_meta *ctrl_meta = bt_data->raw_src_mappings[PAD].meta;
+    struct raw_src_mapping *map = &bt_data->raw_src_mappings[PAD];
 
+    TESTS_CMDS_LOG("\"wireless_input\": {\"report_id\": %ld", bt_data->base.report_id);
 #ifdef CONFIG_BLUERETRO_ADAPTER_INPUT_DBG
-#ifdef CONFIG_BLUERETRO_RAW_INPUT
-    printf("{\"log_type\": \"wireless_input\", \"report_id\": %ld", bt_data->base.report_id);
-#else
     printf("R%ld: ", bt_data->base.report_id);
-#endif
 #endif
 
     if (!atomic_test_bit(&bt_data->base.flags[PAD], BT_INIT)) {
         hid_parser_load_report(bt_data, bt_data->base.report_id);
-        hid_pad_init(meta, &bt_data->reports[PAD], &bt_data->raw_src_mappings[PAD]);
+        hid_pad_init(meta, bt_data->reports[PAD], &bt_data->raw_src_mappings[PAD]);
         mapping_quirks_apply(bt_data);
+        bt_mon_log(false, "%s: axes_cal: [", __FUNCTION__);
     }
 
     memset((void *)ctrl_data, 0, sizeof(*ctrl_data));
@@ -559,16 +653,14 @@ static void hid_pad_to_generic(struct bt_data *bt_data, struct wireless_ctrl *ct
     ctrl_data->desc = (uint32_t *)bt_data->raw_src_mappings[PAD].desc;
 
     if (meta->hid_btn_idx > -1) {
-        uint32_t len = bt_data->reports[PAD].usages[meta->hid_btn_idx].bit_size;
-        uint32_t offset = bt_data->reports[PAD].usages[meta->hid_btn_idx].bit_offset;
+        uint32_t len = bt_data->reports[PAD]->usages[meta->hid_btn_idx].bit_size;
+        uint32_t offset = bt_data->reports[PAD]->usages[meta->hid_btn_idx].bit_offset;
         uint32_t mask = (1ULL << len) - 1;
         uint32_t byte_offset = offset / 8;
         uint32_t bit_shift = offset % 8;
         uint32_t buttons = ((*(uint32_t *)(bt_data->base.input + byte_offset)) >> bit_shift) & mask;
 
-#ifdef CONFIG_BLUERETRO_RAW_INPUT
-        printf(", \"btns\": %lu", buttons);
-#endif
+        TESTS_CMDS_LOG(", \"btns\": %lu", buttons);
 
         for (uint32_t i = 0; i < ARRAY_SIZE(generic_btns_mask); i++) {
             if (buttons & bt_data->raw_src_mappings[PAD].btns_mask[i]) {
@@ -579,72 +671,64 @@ static void hid_pad_to_generic(struct bt_data *bt_data, struct wireless_ctrl *ct
 
     /* Convert hat to regular btns */
     if (meta->hid_hat_idx > -1) {
-        uint32_t len = bt_data->reports[PAD].usages[meta->hid_hat_idx].bit_size;
-        uint32_t offset = bt_data->reports[PAD].usages[meta->hid_hat_idx].bit_offset;
+        uint32_t len = bt_data->reports[PAD]->usages[meta->hid_hat_idx].bit_size;
+        uint32_t offset = bt_data->reports[PAD]->usages[meta->hid_hat_idx].bit_offset;
         uint32_t mask = (1ULL << len) - 1;
         uint32_t byte_offset = offset / 8;
         uint32_t bit_shift = offset % 8;
         uint32_t hat = ((*(uint32_t *)(bt_data->base.input + byte_offset)) >> bit_shift) & mask;
-        uint32_t min = bt_data->reports[PAD].usages[meta->hid_hat_idx].logical_min;
+        uint32_t min = bt_data->reports[PAD]->usages[meta->hid_hat_idx].logical_min;
 
-#ifdef CONFIG_BLUERETRO_RAW_INPUT
-        printf(", \"hat\": %lu", hat);
-#endif
+        TESTS_CMDS_LOG(", \"hat\": %lu", hat);
 
         ctrl_data->btns[0].value |= hat_to_ld_btns[(hat - min) & 0xF];
     }
 
-#ifdef CONFIG_BLUERETRO_RAW_INPUT
-    printf(", \"axes\": [");
-#endif
+    TESTS_CMDS_LOG(", \"axes\": [");
 
-    for (uint32_t i = 0; i < ADAPTER_MAX_AXES; i++) {
-        if (meta->hid_axes_idx[i] > -1) {
-            int32_t len = bt_data->reports[PAD].usages[meta->hid_axes_idx[i]].bit_size;
-            uint32_t offset = bt_data->reports[PAD].usages[meta->hid_axes_idx[i]].bit_offset;
+    for (uint32_t i = 0; i < ADAPTER_PS2_MAX_AXES; i++) {
+        if (map->axes_idx[i] > -1) {
+            int32_t len = bt_data->reports[PAD]->usages[map->axes_idx[i]].bit_size;
+            uint32_t offset = bt_data->reports[PAD]->usages[map->axes_idx[i]].bit_offset;
             uint32_t mask = (1ULL << len) - 1;
             uint32_t byte_offset = offset / 8;
             uint32_t bit_shift = offset % 8;
             uint32_t value = ((*(uint32_t *)(bt_data->base.input + byte_offset)) >> bit_shift) & mask;
 
-#ifdef CONFIG_BLUERETRO_RAW_INPUT
-                if (i) {
-                    printf(", ");
-                }
-#endif
-
-            if (!atomic_test_bit(&bt_data->base.flags[PAD], BT_INIT)) {
-                bt_data->base.axes_cal[i] = -(value  - meta->hid_axes_meta[i].neutral);
+            if (i) {
+                TESTS_CMDS_LOG(", ");
             }
 
-            ctrl_data->axes[i].meta = &meta->hid_axes_meta[i];
+            if (!atomic_test_bit(&bt_data->base.flags[PAD], BT_INIT)) {
+                bt_data->base.axes_cal[i] = -(value  - ctrl_meta[i].neutral);
+                if (i) {
+                    bt_mon_log(false, ", ");
+                }
+                bt_mon_log(false, "%d", bt_data->base.axes_cal[i]);
+            }
+
+            ctrl_data->axes[i].meta = &ctrl_meta[i];
 
             /* Is axis unsign? */
-            if (bt_data->reports[PAD].usages[meta->hid_axes_idx[i]].logical_min >= 0) {
-                ctrl_data->axes[i].value = value - meta->hid_axes_meta[i].neutral + bt_data->base.axes_cal[i];
-#ifdef CONFIG_BLUERETRO_RAW_INPUT
-                printf("%lu", value);
-#endif
+            if (bt_data->reports[PAD]->usages[map->axes_idx[i]].logical_min >= 0) {
+                ctrl_data->axes[i].value = value - ctrl_meta[i].neutral + bt_data->base.axes_cal[i];
+                TESTS_CMDS_LOG("%lu", value);
             }
             else {
                 ctrl_data->axes[i].value = value;
                 if (ctrl_data->axes[i].value & BIT(len - 1)) {
                     ctrl_data->axes[i].value |= ~mask;
                 }
-#ifdef CONFIG_BLUERETRO_RAW_INPUT
-                printf("%ld", ctrl_data->axes[i].value);
-#endif
+                TESTS_CMDS_LOG("%ld", ctrl_data->axes[i].value);
                 ctrl_data->axes[i].value += bt_data->base.axes_cal[i];
             }
         }
     }
     if (!atomic_test_bit(&bt_data->base.flags[PAD], BT_INIT)) {
         atomic_set_bit(&bt_data->base.flags[PAD], BT_INIT);
+        bt_mon_log(true, "]");
     }
-#ifdef CONFIG_BLUERETRO_RAW_INPUT
-    printf("]}\n");
-#endif
-
+    TESTS_CMDS_LOG("]},\n");
 }
 
 int32_t hid_to_generic(struct bt_data *bt_data, struct wireless_ctrl *ctrl_data) {
@@ -695,7 +779,8 @@ int32_t hid_to_generic(struct bt_data *bt_data, struct wireless_ctrl *ctrl_data)
     return 0;
 }
 
-void hid_fb_from_generic(struct generic_fb *fb_data, struct bt_data *bt_data) {
+bool hid_fb_from_generic(struct generic_fb *fb_data, struct bt_data *bt_data) {
+    bool ret = true;
 
     switch (fb_data->type) {
         case FB_TYPE_RUMBLE:
@@ -714,7 +799,7 @@ void hid_fb_from_generic(struct generic_fb *fb_data, struct bt_data *bt_data) {
                     rumble->state[2] = 0x00;
                 }
             }
-            else {
+            else if (bt_data->reports[RUMBLE]) {
                 struct generic_rumble *rumble = (struct generic_rumble *)bt_data->base.output;
 
                 rumble->report_size = 0;
@@ -729,57 +814,68 @@ void hid_fb_from_generic(struct generic_fb *fb_data, struct bt_data *bt_data) {
                 pwr[0] = fb_data->lf_pwr;
                 pwr[1] = fb_data->hf_pwr;
 
-                for (uint32_t i = 0; i < bt_data->reports[RUMBLE].usage_cnt; i++)
+                for (uint32_t i = 0; i < bt_data->reports[RUMBLE]->usage_cnt; i++)
                 {
                     is_rumble_usage = false;
 
-                    switch (bt_data->reports[RUMBLE].usages[i].usage)
+                    switch (bt_data->reports[RUMBLE]->usages[i].usage)
                     {
                         case 0x50: /* Duration */
-                            bytes_count = (bt_data->reports[RUMBLE].usages[i].bit_size + 7) / 8;
+                            bytes_count = (bt_data->reports[RUMBLE]->usages[i].bit_size + 7) / 8;
                             rumble->report_size += bytes_count;
 
                             if (fb_data->state) {
-                                tmp_value = bt_data->reports[RUMBLE].usages[i].logical_max;
+                                tmp_value = bt_data->reports[RUMBLE]->usages[i].logical_max;
                             }
                             else {
-                                tmp_value = bt_data->reports[RUMBLE].usages[i].logical_min;
+                                tmp_value = bt_data->reports[RUMBLE]->usages[i].logical_min;
                             }
 
                             is_rumble_usage = true;
                             break;
-                        case 0x70: /* Magnitude */
                         case 0x97: /* Enable Actuators */
-                            bytes_count = (bt_data->reports[RUMBLE].usages[i].bit_size + 7) / 8;
+                            if (bt_data->reports[RUMBLE]->usages[i].logical_max == 1 &&
+                                    bt_data->reports[RUMBLE]->usages[i].bit_size == 4) {
+                                bytes_count = (bt_data->reports[RUMBLE]->usages[i].bit_size + 7) / 8;
+                                rumble->report_size += bytes_count;
+                                
+                                tmp_value = 0x03;
+
+                                is_rumble_usage = true;
+                                break;
+                            }
+                            /* Fallthrough */
+                        case 0x70: /* Magnitude */
+                            bytes_count = (bt_data->reports[RUMBLE]->usages[i].bit_size + 7) / 8;
                             rumble->report_size += bytes_count;
 
                             if (fb_data->state && pwr_idx < sizeof(pwr)/sizeof(pwr[0])) {
-                                tmp_value = ((float)bt_data->reports[RUMBLE].usages[i].logical_max / 255.0) * pwr[pwr_idx++];
+                                tmp_value = ((float)bt_data->reports[RUMBLE]->usages[i].logical_max / 255.0) * pwr[pwr_idx++];
                             }
                             else {
-                                tmp_value = bt_data->reports[RUMBLE].usages[i].logical_min;
+                                tmp_value = bt_data->reports[RUMBLE]->usages[i].logical_min;
                             }
 
                             is_rumble_usage = true;
                             break;
                         case 0x7C: /* Loop Count */
-                            bytes_count = (bt_data->reports[RUMBLE].usages[i].bit_size + 7) / 8;
+                            bytes_count = (bt_data->reports[RUMBLE]->usages[i].bit_size + 7) / 8;
                             rumble->report_size += bytes_count;
 
                             if (fb_data->state) {
-                                tmp_value = bt_data->reports[RUMBLE].usages[i].logical_max;
+                                tmp_value = bt_data->reports[RUMBLE]->usages[i].logical_max;
                             }
                             else {
-                                tmp_value = bt_data->reports[RUMBLE].usages[i].logical_min;
+                                tmp_value = bt_data->reports[RUMBLE]->usages[i].logical_min;
                             }
 
                             is_rumble_usage = true;
                             break;
                         case 0xA7: /* Start Delay */
-                            bytes_count = (bt_data->reports[RUMBLE].usages[i].bit_size + 7) / 8;
+                            bytes_count = (bt_data->reports[RUMBLE]->usages[i].bit_size + 7) / 8;
                             rumble->report_size += bytes_count;
 
-                            tmp_value = bt_data->reports[RUMBLE].usages[i].logical_min;
+                            tmp_value = bt_data->reports[RUMBLE]->usages[i].logical_min;
 
                             is_rumble_usage = true;
                             break;
@@ -797,11 +893,13 @@ void hid_fb_from_generic(struct generic_fb *fb_data, struct bt_data *bt_data) {
                             rumble->state[offset++] = 0;
                         }
                     }
+                    pwr_idx &= 0x01;
                 }
 
-                rumble->report_id = bt_data->reports[RUMBLE].id;
+                rumble->report_id = bt_data->reports[RUMBLE]->id;
             }
             break;
     }
+    return ret;
 }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2024, Jacques Gagnon
+ * Copyright (c) 2019-2025, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -22,6 +22,7 @@
 #include "wireless/wireless.h"
 #include "macro.h"
 #include "bluetooth/host.h"
+#include "tests/cmds.h"
 
 const uint32_t hat_to_ld_btns[16] = {
     BIT(PAD_LD_UP), BIT(PAD_LD_UP) | BIT(PAD_LD_RIGHT), BIT(PAD_LD_RIGHT), BIT(PAD_LD_DOWN) | BIT(PAD_LD_RIGHT),
@@ -424,16 +425,8 @@ void adapter_bridge(struct bt_data *bt_data) {
         }
 
 #ifdef CONFIG_BLUERETRO_ADAPTER_INPUT_DBG
-#ifdef CONFIG_BLUERETRO_JSON_DBG
-        printf("{\"log_type\": \"generic_input\"");
-#endif
+        TESTS_CMDS_LOG("\"generic_input\": {");
         adapter_debug_wireless_print(ctrl_input);
-#endif
-#ifdef CONFIG_BLUERETRO_ADAPTER_RUMBLE_DBG
-        if (ctrl_input->btns[0].value & BIT(PAD_RB_DOWN)) {
-            uint8_t tmp = 0;
-            adapter_q_fb(&tmp, 1);
-        }
 #endif
         if (wired_adapter.system_id != WIRED_AUTO) {
             if (wired_meta_init(ctrl_output)) {
@@ -445,9 +438,7 @@ void adapter_bridge(struct bt_data *bt_data) {
                 out_mask = adapter_mapping(&config.in_cfg[bt_data->base.pids->out_idx]);
 
 #ifdef CONFIG_BLUERETRO_ADAPTER_INPUT_MAP_DBG
-#ifdef CONFIG_BLUERETRO_JSON_DBG
-            printf("{\"log_type\": \"mapped_input\"");
-#endif
+            TESTS_CMDS_LOG("\"mapped_input\": {");
             adapter_debug_wired_print(&ctrl_output[bt_data->base.pids->out_idx]);
 #endif
             ctrl_output[bt_data->base.pids->out_idx].index = bt_data->base.pids->out_idx;
@@ -481,21 +472,16 @@ void adapter_fb_stop_timer_stop(uint8_t dev_id) {
     }
 }
 
-uint32_t adapter_bridge_fb(struct raw_fb *fb_data, struct bt_data *bt_data) {
-    uint32_t ret = 0;
-#ifndef CONFIG_BLUERETRO_ADAPTER_RUMBLE_DBG
+bool adapter_bridge_fb(struct raw_fb *fb_data, struct bt_data *bt_data) {
+    bool ret = false;
+
     if (wired_adapter.system_id != WIRED_AUTO && bt_data && bt_data->base.pids) {
         wired_fb_to_generic(config.out_cfg[bt_data->base.pids->id].dev_mode, fb_data, &fb_input);
-#else
-        fb_input.state ^= 0x01;
-#endif
+
         if (bt_data->base.pids->type != BT_NONE) {
-            wireless_fb_from_generic(&fb_input, bt_data);
-            ret = 1;
+            ret = wireless_fb_from_generic(&fb_input, bt_data);
         }
-#ifndef CONFIG_BLUERETRO_ADAPTER_RUMBLE_DBG
     }
-#endif
     return ret;
 }
 
@@ -555,12 +541,13 @@ void start_rumble_sequence(uint32_t wired_id, uint32_t duration_us, int repeat_c
 
 
 
-void adapter_toggle_fb(uint32_t wired_id, uint32_t duration_us) {
+
+void adapter_toggle_fb(uint32_t wired_id, uint32_t duration_us, uint8_t lf_pwr, uint8_t hf_pwr) {
     struct bt_dev *device = NULL;
     struct bt_data *bt_data = NULL;
 
     bt_host_get_active_dev_from_out_idx(wired_id, &device);
-    if (device) {
+    if (!rumble_mute && device) {
         bt_data = &bt_adapter.data[device->ids.id];
         if (bt_data) {
             struct generic_fb fb_data = {0};
@@ -568,8 +555,8 @@ void adapter_toggle_fb(uint32_t wired_id, uint32_t duration_us) {
             fb_data.wired_id = wired_id;
             fb_data.type = FB_TYPE_RUMBLE;
             fb_data.state = 1;
-            fb_data.hf_pwr = 0xFF;
-            fb_data.lf_pwr = 0xFF;
+            fb_data.hf_pwr = hf_pwr;
+            fb_data.lf_pwr = lf_pwr;
             rumble_mute = true;
             adapter_fb_stop_timer_start(wired_id, duration_us);
             wireless_fb_from_generic(&fb_data, bt_data);
@@ -594,10 +581,6 @@ void adapter_init(void) {
         bt_adapter.data[i].raw_src_mappings = heap_caps_aligned_alloc(32, sizeof(struct raw_src_mapping) * REPORT_MAX, MALLOC_CAP_32BIT);
         if (bt_adapter.data[i].raw_src_mappings == NULL) {
             printf("# %s bt_adapter.data[%ld].raw_src_mappings alloc fail\n", __FUNCTION__, i);
-        }
-        bt_adapter.data[i].reports = heap_caps_aligned_alloc(32, sizeof(struct hid_report) * REPORT_MAX, MALLOC_CAP_32BIT);
-        if (bt_adapter.data[i].reports == NULL) {
-            printf("# %s bt_adapter.data[%ld].reports alloc fail\n", __FUNCTION__, i);
         }
     }
 

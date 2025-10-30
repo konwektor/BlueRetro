@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2024, Jacques Gagnon
+ * Copyright (c) 2019-2025, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -15,6 +15,8 @@
 #define CONFIG_MAGIC CONFIG_MAGIC_V3
 #define CONFIG_VERSION 3
 #define ADAPTER_MAPPING_MAX 128
+#define CONFIG_BANKSEL_MAX 4
+#define CONFIG_BANKSEL_DBG 0xDB
 
 enum {
     DEFAULT_CFG = 0,
@@ -99,9 +101,11 @@ struct hw_config {
 extern struct config config;
 extern struct hw_config hw_config;
 
+void config_set_rst_bare_core(bool value);
 void hw_config_patch(void);
 void config_init(uint32_t src);
 void config_update(uint32_t dst);
 uint32_t config_get_src(void);
+void config_debug_log(void);
 
 #endif /* _CONFIG_H_ */
