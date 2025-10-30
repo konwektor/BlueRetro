@@ -30,8 +30,7 @@
 #define sda_pin 22
 #define scl_pin 21
 #define I2C_NUM I2C_NUM_0
-//#define APB_CLK_HZ (80 * 1000 * 1000)  // Można zmienić globalnie
-
+//#define APB_CLK_HZ (80 * 1000 * 1000) 
 
 
 static bool portActive[OGX360_I2C_PORT_MAX] = {false}; 
@@ -40,12 +39,12 @@ static bool rumble_off_state[4] = {false};
 static bool initialized = false;
 static bool ports_update_pending = false;
 
-const char ping[] = { 0xAA };
-const char disconnectPacket[] = { 0xF0 };
+const uint8_t  ping[] = {0xAA};
+const uint8_t disconnectPacket[] = { 0xF0 };
 
 
 
- // Funkcja niskopoziomowego zapisu I2C
+
 static inline esp_err_t i2c_ll_master_write(i2c_port_t i2c_num, uint8_t slave_addr, const uint8_t *data, size_t data_len) {
     i2c_dev_t *hw = I2C_LL_GET_HW(i2c_num);
 
@@ -106,23 +105,20 @@ static inline esp_err_t i2c_ll_master_write(i2c_port_t i2c_num, uint8_t slave_ad
 }
 
 void ogx360_i2c_ping1(uint8_t player) {
-    // ogx360_initialize_i2c();
-    //esp_err_t result = i2c_ll_master_write(I2C_NUM_0, 1, (void*)ping, sizeof(ping));
-    esp_err_t result = i2c_master_write_to_device(I2C_NUM_0, player + 1, (void*)ping, sizeof(ping), 10);
+    esp_err_t result = i2c_master_write_to_device(I2C_NUM_0, player + 1, ping, sizeof(ping), 10);
     playerConnected[player] = (result == ESP_OK);
-     ets_printf("ogx360_i2c_ping1: Player %d ping %s\n",player +1, (result == ESP_OK) ? "successful" : "\x1b[31mfailed\x1b[0m");
-    //  initialized =true;
+    ets_printf("ogx360_i2c_ping1: Player %d ping %s\n",player +1, (result == ESP_OK) ? "successful" : "\x1b[31mfailed\x1b[0m");
+    
 }
 
 void ogx360_i2c_disconnectPacket1(uint8_t player) {
-     esp_err_t result = i2c_master_write_to_device(I2C_NUM_0, player + 1, (void*)disconnectPacket, sizeof(disconnectPacket), 10);
+     esp_err_t result = i2c_master_write_to_device(I2C_NUM_0, player + 1, disconnectPacket, sizeof(disconnectPacket), 10);
      playerConnected[player] = (result == ESP_OK);
      ets_printf("ogx360_i2c_disconnectPacket1: player %d disconnectPacket %s\n",player + 1, (result == ESP_OK) ? "successful" : "\x1b[31mfailed\x1b[0m");
 }
 
 void ogx360_i2c_ping_ll(void) {
-     i2c_dev_t *hw = I2C_LL_GET_HW(I2C_NUM_0);
-     // --- Przygotowanie danych do wysłania ---
+    i2c_dev_t *hw = I2C_LL_GET_HW(I2C_NUM_0);
     ets_printf("ogx360_LOW_LEVEL_i2c_ping_ll --- Ustawienie komend: RESTART, WRITE, STOP ---  \n");
     
     uint8_t buf[2];
@@ -158,7 +154,7 @@ void ogx360_i2c_ping_ll(void) {
     cmd.ack_exp = 0; // oczekiwany ACK (0)
     cmd.ack_val = 0;
     cmd.done = 0;   
-    i2c_ll_master_write_cmd_reg(hw, cmd, 2);  // komenda 2: write dane
+    i2c_ll_master_write_cmd_reg(hw, cmd, 2);  // komenda 2: write data
     ets_printf("ogx360_LOW_LEVEL_i2c_ping_ll :  WRITE 1  BAJT POSZEDL \n");
 
     // STOP
@@ -173,7 +169,7 @@ void ogx360_i2c_ping_ll(void) {
     
     // --- Rozpoczęcie transmisji ---
    i2c_ll_start_trans(hw);
-    ets_printf("ogx360_LOW_LEVEL_i2c_ping_ll : poszlo i2c_ll_master_trans_start  \n");
+    ets_printf("ogx360_LOW_LEVEL_i2c_ping_ll : SEND i2c_ll_master_trans_start  \n");
  
     // --- Oczekiwanie na zakończenie transmisji (polecenie STOP) ---
     while (!i2c_ll_master_is_cmd_done(hw, 3)) {    
@@ -186,7 +182,7 @@ void ogx360_i2c_ping_ll(void) {
     //ets_delay_us(100000); // 100ms delay
     //}
     }
-    ets_printf("ogx360_LOW_LEVEL_i2c_ping_ll  :  poszlo i2c_ll: master_is_cmd_done  \n");
+    ets_printf("ogx360_LOW_LEVEL_i2c_ping_ll  :   i2c_ll: master_is_cmd_done  \n");
 
     // sprawdzenie błędów
     // --- Critical Error Check ---
@@ -292,7 +288,7 @@ void ogx360_initialize_i2c(void) {
 
      ets_printf("OGX360_INITIALIZE_I2C - starting\n");    
     if  (i2c_done) { //If wired_adapter_reinit - dont initialize  already initialized i2c!
-        ets_printf("OGX360_INITIALIZE_I2C - done, dont initialize  already initialized i2c - returning from functionn!\n");
+        ets_printf("OGX360_INITIALIZE_I2C - don`t initialize  already initialized i2c - returning from function!\n");
         return;
     } else {
         ets_printf("OGX360_INITIALIZE_I2C - setting I2C config\n");
@@ -324,17 +320,16 @@ void ogx360_initialize_i2c(void) {
     }
 }
 
-void ogx360_pingSlaves() { 
-    // Only ping if I2C is initialized
-    for (int i = 0; i < OGX360_I2C_PORT_MAX; i++) {
-        // Skip if port state matches connection state
+void ogx360_pingSlaves() {
+	for (int i = 0; i < OGX360_I2C_PORT_MAX; i++) {
+		// Skip if port state matches connection state
         if (portActive[i] == playerConnected[i]) {
             continue;
         }
 
         if (portActive[i]) {
             // Port is active but player not connected - try to connect
-            esp_err_t result = i2c_master_write_to_device(I2C_NUM_0, i + 1, (void*)ping, sizeof(ping), 10);
+            esp_err_t result = i2c_master_write_to_device(I2C_NUM_0, i + 1, ping, sizeof(ping), 10);
             playerConnected[i] = (result == ESP_OK);
             ets_printf("OGX360_pingSlaves: Port %d ping %s\n", i, (result == ESP_OK) ? "successful" : "\x1b[31mfailed\x1b[0m");
             if (result != ESP_OK) {
@@ -343,7 +338,7 @@ void ogx360_pingSlaves() {
         } else {
             // Port is inactive but player still connected - 
             //disconnectPacket[] = { 0xF0 }; arduinos USB D+,D- pins going to high-Z state/not visible anymore by USB host
-            esp_err_t result = i2c_master_write_to_device(I2C_NUM_0, i + 1, (void*)disconnectPacket, sizeof(disconnectPacket), 10);
+            esp_err_t result = i2c_master_write_to_device(I2C_NUM_0, i + 1, disconnectPacket, sizeof(disconnectPacket), 10);
             if (result == ESP_OK) {
                 playerConnected[i] = false;
                 ets_printf("OGX360_pingSlaves: Port %d disconnected successfully\n", i);
@@ -374,7 +369,7 @@ void ogx360_ll_process(uint8_t player) {
 }
 
 void ogx360_process(uint8_t player) {
-    //no i2c operations during ports update -else timeouts coz of pinging devices
+    //no i2c operations during ports update -else WD timeouts coz of pinging devices
     if (ports_update_pending) {
         ets_printf("OGX360_PROCESS:ports are updating -  quitting\n");
         return;
@@ -383,16 +378,17 @@ void ogx360_process(uint8_t player) {
     if (!initialized) {
     ets_printf("OGX360_PROCESS: i2c not initialized\n");
     ogx360_initialize_i2c();
-    uint8_t reader[6]= {0};      
+       
     return;
     }
     if (portActive[player] != playerConnected[player]) {
-        ets_printf("OGX360_PROCESS: player not conected, goin to ping slave\n");
+        ets_printf("OGX360_PROCESS: player not connected, goin to ping slave\n");
         ogx360_pingSlaves();
         ets_printf("OGX360_PROCESS: ping slaves done - quit\n");     
         return;
     }
-    
+	
+	uint8_t reader[6]= {0};
     //ets_printf("OGX360_PROCESS: if player connected start write/read\n");
 
     if (playerConnected[player]) {
@@ -412,10 +408,10 @@ void ogx360_process(uint8_t player) {
             // Valid I2C data received
             if (reader[0] == 0x00 && reader[1] == 0x06) {    // Correct rumble header
                 if (reader[3] == 0 && reader[5] == 0) {
-                    ets_printf("OGX360_PROCESS: ZERO MOTOR DATA: processing\n");     
-                        // Both rumble motors off
+                    //ets_printf("OGX360_PROCESS: ZERO MOTOR DATA: processing\n");     
+                    // Both rumble motors off
                     if (rumble_off_state[player]) {         //if zero data raw_fb packet has been send already, return to avoid unnecessary transfers
-                        ets_printf("OGX360_PROCESS: ZERO MOTOR DATA: RUMBLE_OFF is already true, nothing to do - leaving\n");     
+                        //ets_printf("OGX360_PROCESS: ZERO MOTOR DATA: RUMBLE_OFF is already true, nothing to do - leaving\n");     
                         return;
                     }
                        
@@ -424,13 +420,13 @@ void ogx360_process(uint8_t player) {
                         fb_data.header.wired_id = player;
                         fb_data.header.type = FB_TYPE_RUMBLE;
                         fb_data.header.data_len = 0;  // Rumble off command
-                        ets_printf("OGX360_PROCESS: ZERO MOTOR DATA: sending packet for RUMBLE_OFF\n");    
+                        //ets_printf("OGX360_PROCESS: ZERO MOTOR DATA: sending packet for RUMBLE_OFF\n");    
                         adapter_q_fb(&fb_data);
-                        ets_printf("OGX360_PROCESS: ZERO MOTOR DATA: RUMBLE_OFF done, setting flag to true - avoid duplicates sending RUMBLE_OFF if still zero\n");    
+                        //ets_printf("OGX360_PROCESS: ZERO MOTOR DATA: RUMBLE_OFF done, setting flag to true - avoid duplicates sending RUMBLE_OFF if still zero\n");    
                         rumble_off_state[player] = true; // set flag true                      
                     
                 } else {     // At least one motor active
-                    ets_printf("OGX360_PROCESS: recived MOTOR DATA\n");    
+                    //ets_printf("OGX360_PROCESS: recived MOTOR DATA\n");    
                     static uint8_t last_values[OGX360_I2C_PORT_MAX][2] = {0};
                     bool values_changed = (reader[3] != last_values[player][0] || reader[5] != last_values[player][1]);                    
                     if (values_changed || rumble_off_state[player]) {                        
@@ -442,7 +438,7 @@ void ogx360_process(uint8_t player) {
                         fb_data.header.type = FB_TYPE_RUMBLE;
                         fb_data.header.data_len = 2;
                         fb_data.data[0] = reader[3];  // Left motor low
-                        fb_data.data[1] = reader[5];  // Left motor high
+                        fb_data.data[1] = reader[5];  // Right motor high
                         adapter_q_fb(&fb_data); //send rumble packet
                     }
                 }
@@ -599,9 +595,9 @@ void ogx360_i2c_init(uint32_t package) {
      
 
 
-	ets_printf("ogx360_i2c_init:  Starting dummy  \n");
+	//ets_printf("ogx360_i2c_init:  Starting dummy  \n");
     if (!initialized) {
-        ets_printf("ogx360_i2c_init: not initialized - settings ports to zero  \n");
+        //ets_printf("ogx360_i2c_init: not initialized - settings ports to zero  \n");
         //initialized = false;
         ogx360_i2c_port_cfg(0xF);
         ets_printf("ogx360_i2c_init: ports init zero done \n");
@@ -633,7 +629,7 @@ void ogx360_i2c_port_cfg(uint16_t mask) {
                 ets_printf("OGX360_I2C_PORT_CFG: Change detected on port %d\n", i);
                 if (portActive[i]) {  // Aktywacja portu
                     ets_printf("OGX360_I2C_PORT_CFG: Port %d ACTIVATED, attempting ping\n", i);
-                    esp_err_t result = i2c_master_write_to_device(I2C_NUM_0, i + 1, &ping, 1, 10);                
+                    esp_err_t result = i2c_master_write_to_device(I2C_NUM_0, i + 1, ping, sizeof(ping), 10);                
                     if (result == ESP_OK) {                        
                         ets_printf("OGX360_I2C_PORT_CFG: Pinging Arduino on port %d OK\n", i);
                         playerConnected[i] = true;                        
@@ -644,8 +640,7 @@ void ogx360_i2c_port_cfg(uint16_t mask) {
                     }
                 } else {  
                     ets_printf("OGX360_I2C_PORT_CFG: Port %d DEACTIVATED, sending disconnect\n", i);
-                    const uint8_t disconnect = 0xF0;
-                    esp_err_t result = i2c_master_write_to_device(I2C_NUM_0, i + 1, &disconnect, 1, 10);                             
+                    esp_err_t result = i2c_master_write_to_device(I2C_NUM_0, i + 1, disconnectPacket, sizeof(disconnectPacket), 10);                             
                     if (result == ESP_OK) {
                         ets_printf("OGX360_I2C_PORT_CFG: Detaching Arduino USB OK\n");
                         playerConnected[i] = false;
