@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2023, Jacques Gagnon
+ * Copyright (c) 2019-2025, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -10,6 +10,8 @@
 #include "adapter/config.h"
 #include "adapter/wired/wired.h"
 #include "adapter/wireless/wireless.h"
+#include "tests/cmds.h"
+#include "bluetooth/mon.h"
 #include "n64.h"
 
 #define N64_AXES_MAX 2
@@ -64,17 +66,17 @@ struct n64_kb_map {
     uint8_t bitfield;
 } __packed;
 
-static const uint32_t n64_mask[4] = {0x33DFAFFF, 0x00000000, 0x00000000, BR_COMBO_MASK};
+static const uint32_t n64_mask[4] = {0x77DF0FFF, 0x00000000, 0x00000000, BR_COMBO_MASK};
 static const uint32_t n64_desc[4] = {0x0000000F, 0x00000000, 0x00000000, 0x00000000};
 static DRAM_ATTR const uint32_t n64_btns_mask[32] = {
     0, 0, 0, 0,
     BIT(N64_C_LEFT), BIT(N64_C_RIGHT), BIT(N64_C_DOWN), BIT(N64_C_UP),
     BIT(N64_LD_LEFT), BIT(N64_LD_RIGHT), BIT(N64_LD_DOWN), BIT(N64_LD_UP),
-    0, BIT(N64_C_RIGHT), 0, BIT(N64_C_UP),
+    0, 0, 0, 0,
     BIT(N64_B), BIT(N64_C_DOWN), BIT(N64_A), BIT(N64_C_LEFT),
     BIT(N64_START), 0, 0, 0,
-    BIT(N64_Z), BIT(N64_L), 0, 0,
-    BIT(N64_Z), BIT(N64_R), 0, 0,
+    BIT(N64_Z), BIT(N64_L), BIT(N64_C_UP), 0,
+    BIT(N64_Z), BIT(N64_R), BIT(N64_C_RIGHT), 0,
 };
 
 static const uint32_t n64_mouse_mask[4] = {0x110000F0, 0x00000000, 0x00000000, BR_COMBO_MASK};
@@ -201,12 +203,12 @@ static void n64_ctrl_special_action(struct wired_ctrl *ctrl_data, struct wired_d
                 /* Change config directly but do not update file */
                 if (config.out_cfg[ctrl_data->index].acc_mode == ACC_MEM) {
                     config.out_cfg[ctrl_data->index].acc_mode = ACC_RUMBLE;
-                    adapter_toggle_fb(ctrl_data->index, 300000);
+                    adapter_toggle_fb(ctrl_data->index, 300000, 0xFF, 0xFF);
                     printf("# %s: Set rumble pak\n", __FUNCTION__);
                 }
                 else {
                     config.out_cfg[ctrl_data->index].acc_mode = ACC_MEM;
-                    adapter_toggle_fb(ctrl_data->index, 150000);
+                    adapter_toggle_fb(ctrl_data->index, 150000, 0xFF, 0xFF);
                     printf("# %s: Set ctrl pak\n", __FUNCTION__);
                 }
             }
@@ -270,10 +272,10 @@ static void n64_ctrl_from_generic(struct wired_ctrl *ctrl_data, struct wired_dat
 
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp));
 
-#ifdef CONFIG_BLUERETRO_RAW_OUTPUT
-    printf("{\"log_type\": \"wired_output\", \"axes\": [%d, %d], \"btns\": %d}\n",
+    TESTS_CMDS_LOG("\"wired_output\": {\"axes\": [%d, %d], \"btns\": %d},\n",
         map_tmp.axes[n64_axes_idx[0]], map_tmp.axes[n64_axes_idx[1]], map_tmp.buttons);
-#endif
+    BT_MON_LOG("\"wired_output\": {\"axes\": [%02X, %02X], \"btns\": %04X},\n",
+        map_tmp.axes[n64_axes_idx[0]], map_tmp.axes[n64_axes_idx[1]], map_tmp.buttons);
 }
 
 static void n64_mouse_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {

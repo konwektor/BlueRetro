@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2023, Jacques Gagnon
+ * Copyright (c) 2019-2025, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -10,6 +10,8 @@
 #include "adapter/kb_monitor.h"
 #include "adapter/wired/wired.h"
 #include "system/manager.h"
+#include "tests/cmds.h"
+#include "bluetooth/mon.h"
 #include "saturn.h"
 
 enum {
@@ -302,11 +304,12 @@ void saturn_ctrl_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *w
 
     memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp));
 
-#ifdef CONFIG_BLUERETRO_RAW_OUTPUT
-    printf("{\"log_type\": \"wired_output\", \"axes\": [%d, %d, %d, %d], \"btns\": %d}\n",
+    TESTS_CMDS_LOG("\"wired_output\": {\"axes\": [%d, %d, %d, %d], \"btns\": %d},\n",
         map_tmp.axes[saturn_axes_idx[0]], map_tmp.axes[saturn_axes_idx[1]],
         map_tmp.axes[saturn_axes_idx[4]], map_tmp.axes[saturn_axes_idx[5]], map_tmp.buttons);
-#endif
+    BT_MON_LOG("\"wired_output\": {\"axes\": [%02X, %02X, %02X, %02X], \"btns\": %04X},\n",
+        map_tmp.axes[saturn_axes_idx[0]], map_tmp.axes[saturn_axes_idx[1]],
+        map_tmp.axes[saturn_axes_idx[4]], map_tmp.axes[saturn_axes_idx[5]], map_tmp.buttons);
 }
 
 static void saturn_mouse_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {

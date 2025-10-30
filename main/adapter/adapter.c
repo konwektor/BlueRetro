@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2024, Jacques Gagnon
+ * Copyright (c) 2019-2025, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -22,6 +22,7 @@
 #include "wireless/wireless.h"
 #include "macro.h"
 #include "bluetooth/host.h"
+#include "tests/cmds.h"
 
 const uint32_t hat_to_ld_btns[16] = {
     BIT(PAD_LD_UP), BIT(PAD_LD_UP) | BIT(PAD_LD_RIGHT), BIT(PAD_LD_RIGHT), BIT(PAD_LD_DOWN) | BIT(PAD_LD_RIGHT),
@@ -44,8 +45,9 @@ struct wired_ctrl *ctrl_output;
 struct generic_fb fb_input;
 struct bt_adapter bt_adapter = {0};
 struct wired_adapter wired_adapter = {0};
+struct sequence sequence = {0};
 static uint32_t adapter_out_mask[WIRED_MAX_DEV] = {0};
-static bool rumble_mute = false;
+static bool rumble_mute = false;    //move or not? to wired_data struct - adapter_toggle_fb sets rumble_mute for itself not global for all dev.
 
 static uint32_t btn_id_to_btn_idx(uint8_t btn_id) {
     if (btn_id < 32) {
@@ -424,16 +426,8 @@ void adapter_bridge(struct bt_data *bt_data) {
         }
 
 #ifdef CONFIG_BLUERETRO_ADAPTER_INPUT_DBG
-#ifdef CONFIG_BLUERETRO_JSON_DBG
-        printf("{\"log_type\": \"generic_input\"");
-#endif
+        TESTS_CMDS_LOG("\"generic_input\": {");
         adapter_debug_wireless_print(ctrl_input);
-#endif
-#ifdef CONFIG_BLUERETRO_ADAPTER_RUMBLE_DBG
-        if (ctrl_input->btns[0].value & BIT(PAD_RB_DOWN)) {
-            uint8_t tmp = 0;
-            adapter_q_fb(&tmp, 1);
-        }
 #endif
         if (wired_adapter.system_id != WIRED_AUTO) {
             if (wired_meta_init(ctrl_output)) {
@@ -445,9 +439,7 @@ void adapter_bridge(struct bt_data *bt_data) {
                 out_mask = adapter_mapping(&config.in_cfg[bt_data->base.pids->out_idx]);
 
 #ifdef CONFIG_BLUERETRO_ADAPTER_INPUT_MAP_DBG
-#ifdef CONFIG_BLUERETRO_JSON_DBG
-            printf("{\"log_type\": \"mapped_input\"");
-#endif
+            TESTS_CMDS_LOG("\"mapped_input\": {");
             adapter_debug_wired_print(&ctrl_output[bt_data->base.pids->out_idx]);
 #endif
             ctrl_output[bt_data->base.pids->out_idx].index = bt_data->base.pids->out_idx;
@@ -481,21 +473,16 @@ void adapter_fb_stop_timer_stop(uint8_t dev_id) {
     }
 }
 
-uint32_t adapter_bridge_fb(struct raw_fb *fb_data, struct bt_data *bt_data) {
-    uint32_t ret = 0;
-#ifndef CONFIG_BLUERETRO_ADAPTER_RUMBLE_DBG
+bool adapter_bridge_fb(struct raw_fb *fb_data, struct bt_data *bt_data) {
+    bool ret = false;
+
     if (wired_adapter.system_id != WIRED_AUTO && bt_data && bt_data->base.pids) {
         wired_fb_to_generic(config.out_cfg[bt_data->base.pids->id].dev_mode, fb_data, &fb_input);
-#else
-        fb_input.state ^= 0x01;
-#endif
+
         if (bt_data->base.pids->type != BT_NONE) {
-            wireless_fb_from_generic(&fb_input, bt_data);
-            ret = 1;
+            ret = wireless_fb_from_generic(&fb_input, bt_data);
         }
-#ifndef CONFIG_BLUERETRO_ADAPTER_RUMBLE_DBG
     }
-#endif
     return ret;
 }
 
@@ -506,6 +493,84 @@ void IRAM_ATTR adapter_q_fb(struct raw_fb *fb_data) {
     }
 }
 
+void sequence_rumble_callback(void *arg) {
+    uint8_t wired_id = (uint8_t)(uintptr_t)arg;
+
+    if (wired_id >= WIRED_MAX_DEV)
+    return;
+
+    if (!sequence.array[wired_id].is_active) {
+        return;
+    }
+    
+
+    if (sequence.array[wired_id].current_cycle < sequence.array[wired_id].repeat_count) {
+        // Wywo�aj rumble z zapisanym czasem trwania
+        adapter_toggle_fb(wired_id, sequence.array[wired_id].duration_us, 0xFF, 0xFF);
+        sequence.array[wired_id].current_cycle++;
+        
+        // Ustaw timer na kolejny cykl (czas rumble + przerwa)
+        esp_timer_start_once(sequence.array[wired_id].sequence_timer_handle, 
+                            sequence.array[wired_id].duration_us + 350000);
+    } else {
+         // Zako�cz sekwencj�
+        //esp_timer_stop(sequence.array[wired_id].sequence_timer_handle); //just to be sure, in theory expired esp_timer_start_once stops itself  
+        esp_timer_delete(sequence.array[wired_id].sequence_timer_handle);
+        sequence.array[wired_id].sequence_timer_handle = NULL;
+        sequence.array[wired_id].is_active = false;
+    }
+}
+
+void stop_rumble_sequence(uint8_t wired_id) {
+    if (wired_id >= WIRED_MAX_DEV) return;
+    
+    if (sequence.array[wired_id].sequence_timer_handle) {
+        esp_timer_stop(sequence.array[wired_id].sequence_timer_handle);
+        esp_timer_delete(sequence.array[wired_id].sequence_timer_handle);
+        sequence.array[wired_id].sequence_timer_handle = NULL;
+        sequence.array[wired_id].is_active = false;
+    }
+    // Dodatkowo wy��cz rumble dla tego urz�dzenia
+    struct raw_fb fb_data = {0};
+    fb_data.header.wired_id = wired_id;
+    fb_data.header.type = FB_TYPE_RUMBLE;
+    fb_data.header.data_len = 0; // Wy��cz rumble
+    adapter_q_fb(&fb_data);
+}
+
+void start_rumble_sequence(uint32_t wired_id, uint32_t duration_us, int repeat_count) {
+    if (wired_id >= WIRED_MAX_DEV) return;
+
+    if (sequence.array[wired_id].is_active) {
+        return;
+    }
+    // Zatrzymaj istniej�c� sekwencj� dla tego urz�dzenia
+    //stop_rumble_sequence(wired_id);
+  
+    
+    // Inicjalizuj now� sekwencj�
+    sequence.array[wired_id].repeat_count = repeat_count;
+    sequence.array[wired_id].current_cycle = 0;
+    sequence.array[wired_id].duration_us = duration_us;
+    sequence.array[wired_id].is_active = true;
+    
+    const esp_timer_create_args_t sequence_timer_args = {
+        .callback = sequence_rumble_callback,
+        .arg = (void*)(uintptr_t)wired_id,
+        .name = "sequence_timer"
+    };    
+    
+    if (esp_timer_create(&sequence_timer_args, (esp_timer_handle_t *)&sequence.array[wired_id].sequence_timer_handle) == ESP_OK) {       
+        sequence_rumble_callback((void*)(uintptr_t)wired_id);
+    } else {
+        sequence.array[wired_id].is_active = false;
+        //todo
+    }
+}
+
+
+
+/*
 typedef struct {
     uint8_t repeat_count;
     uint8_t current_cycle;
@@ -553,14 +618,16 @@ void start_rumble_sequence(uint32_t wired_id, uint32_t duration_us, int repeat_c
 }
 
 
+    */
 
 
-void adapter_toggle_fb(uint32_t wired_id, uint32_t duration_us) {
+
+void adapter_toggle_fb(uint32_t wired_id, uint32_t duration_us, uint8_t lf_pwr, uint8_t hf_pwr) {
     struct bt_dev *device = NULL;
     struct bt_data *bt_data = NULL;
 
     bt_host_get_active_dev_from_out_idx(wired_id, &device);
-    if (device) {
+    if (!rumble_mute && device) {
         bt_data = &bt_adapter.data[device->ids.id];
         if (bt_data) {
             struct generic_fb fb_data = {0};
@@ -568,8 +635,8 @@ void adapter_toggle_fb(uint32_t wired_id, uint32_t duration_us) {
             fb_data.wired_id = wired_id;
             fb_data.type = FB_TYPE_RUMBLE;
             fb_data.state = 1;
-            fb_data.hf_pwr = 0xFF;
-            fb_data.lf_pwr = 0xFF;
+            fb_data.hf_pwr = hf_pwr;
+            fb_data.lf_pwr = lf_pwr;
             rumble_mute = true;
             adapter_fb_stop_timer_start(wired_id, duration_us);
             wireless_fb_from_generic(&fb_data, bt_data);
@@ -594,10 +661,6 @@ void adapter_init(void) {
         bt_adapter.data[i].raw_src_mappings = heap_caps_aligned_alloc(32, sizeof(struct raw_src_mapping) * REPORT_MAX, MALLOC_CAP_32BIT);
         if (bt_adapter.data[i].raw_src_mappings == NULL) {
             printf("# %s bt_adapter.data[%ld].raw_src_mappings alloc fail\n", __FUNCTION__, i);
-        }
-        bt_adapter.data[i].reports = heap_caps_aligned_alloc(32, sizeof(struct hid_report) * REPORT_MAX, MALLOC_CAP_32BIT);
-        if (bt_adapter.data[i].reports == NULL) {
-            printf("# %s bt_adapter.data[%ld].reports alloc fail\n", __FUNCTION__, i);
         }
     }
 

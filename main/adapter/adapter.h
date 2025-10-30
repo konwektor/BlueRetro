@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2024, Jacques Gagnon
+ * Copyright (c) 2019-2025, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,6 +9,8 @@
 #include <stdio.h>
 #include <esp_attr.h>
 #include "zephyr/atomic.h"
+#include "tests/cmds.h"
+#include "bluetooth/mon.h"
 
 #ifndef __packed
 #define __packed __attribute__((__packed__))
@@ -19,10 +21,15 @@
 #define GREEN "\033[1;32m"
 
 #define BT_MAX_DEV 7 /* BT limitation */
+
+#ifdef CONFIG_BLUERETRO_QEMU
+#define WIRED_MAX_DEV 8 /* Saturn limit */
+#else
 #define WIRED_MAX_DEV 12 /* Saturn limit */
+#endif
 #define ADAPTER_MAX_AXES 6
 #define ADAPTER_PS2_MAX_AXES 16
-#define REPORT_MAX_USAGE 16
+#define REPORT_MAX_USAGE 24
 #define HID_MAX_REPORT 10
 #define MAX_PULL_BACK 0.95
 
@@ -32,9 +39,9 @@ enum {
     BT_HID_GENERIC,
     BT_PS3,
     BT_WII,
-    BT_XBOX,
     BT_PS,
     BT_SW,
+    BT_SW2,
     BT_TYPE_MAX,
 };
 
@@ -48,18 +55,13 @@ enum {
     BT_WII_CLASSIC_PRO_8BIT,
     BT_WIIU_PRO,
     BT_PS5_DS,
-    BT_XBOX_XINPUT,
-    BT_XBOX_XS,
-    BT_XBOX_ADAPTIVE,
     BT_SW_LEFT_JOYCON,
     BT_SW_RIGHT_JOYCON,
     BT_SW_NES,
     BT_SW_SNES,
     BT_SW_N64,
     BT_SW_MD_GEN,
-    BT_SW_POWERA,
     BT_SW_HYPERKIN_ADMIRAL,
-    BT_8BITDO_GBROS,
     BT_SUBTYPE_MAX,
 };
 
@@ -89,7 +91,7 @@ enum {
     PARALLEL_1P_OD,
     PARALLEL_2P_OD,
     SEA_BOARD,
-    OGX360,
+    GX360,
     WIRED_MAX,
 };
 
@@ -99,7 +101,6 @@ enum {
     KB,
     MOUSE,
     PAD,
-    EXTRA,
     RUMBLE,
     REPORT_MAX,
     //LEDS,
@@ -310,16 +311,18 @@ enum {
     BT_QUIRK_FACE_BTNS_INVERT,
     BT_QUIRK_FACE_BTNS_ROTATE_RIGHT,
     BT_QUIRK_FACE_BTNS_TRIGGER_TO_6BUTTONS,
+    BT_QUIRK_FACE_BTNS_TRIGGER_TO_8BUTTONS,
     BT_QUIRK_TRIGGER_PRI_SEC_INVERT,
     BT_QUIRK_8BITDO_N64,
     BT_QUIRK_8BITDO_N64_MK,
     BT_QUIRK_8BITDO_M30,
+    BT_QUIRK_8BITDO_M30_MODKIT,
     BT_QUIRK_BLUEN64_N64,
     BT_QUIRK_RF_WARRIOR,
     BT_QUIRK_8BITDO_SATURN,
-    BT_QUIRK_STADIA,
     BT_QUIRK_OUYA,
     BT_QUIRK_8BITDO_GC,
+    BT_QUIRK_8BITDO_GBROS,
 };
 
 /* Wired flags */
@@ -472,6 +475,7 @@ struct raw_fb {
 struct hid_usage {
     uint32_t usage_page;
     uint32_t usage;
+    uint32_t usage_max;
     uint32_t flags;
     uint32_t bit_offset;
     uint32_t bit_size;
@@ -492,7 +496,7 @@ struct raw_src_mapping {
     uint32_t mask[4];
     uint32_t desc[4];
     uint32_t btns_mask[32];
-    uint32_t axes_to_btns[ADAPTER_PS2_MAX_AXES];
+    int32_t axes_idx[ADAPTER_PS2_MAX_AXES];
     struct ctrl_meta meta[ADAPTER_PS2_MAX_AXES];
 };
 
@@ -515,14 +519,18 @@ struct bt_data_base {
     uint32_t input_len;
     uint8_t *sdp_data;
     uint32_t sdp_len;
+    uint8_t *pnp_data;
+    uint32_t pnp_len;
     int32_t axes_cal[ADAPTER_PS2_MAX_AXES];
+    uint16_t vid;
+    uint16_t pid;
     uint8_t output[128];
 };
 
 struct bt_data {
     struct bt_data_base base;
     struct raw_src_mapping *raw_src_mappings;
-    struct hid_report *reports;
+    struct hid_report *reports[REPORT_MAX];
 };
 
 struct wired_data {
@@ -556,6 +564,18 @@ struct wired_adapter {
     struct wired_data data[WIRED_MAX_DEV];
 };
 
+struct sequence_data {
+    void *sequence_timer_handle;
+    uint8_t repeat_count;
+    uint8_t current_cycle;
+    uint32_t duration_us;
+    bool is_active;
+};
+
+struct sequence {
+    struct sequence_data array[WIRED_MAX_DEV];
+};
+
 struct bt_adapter {
     struct bt_data data[BT_MAX_DEV];
 };
@@ -566,7 +586,7 @@ struct bt_adapter {
 typedef int32_t (*to_generic_t)(struct bt_data *bt_data, struct wireless_ctrl *ctrl_data);
 typedef void (*from_generic_t)(int32_t dev_mode, struct wired_ctrl *ctrl_data, struct wired_data *wired_data);
 typedef void (*fb_to_generic_t)(int32_t dev_mode, struct raw_fb *raw_fb_data, struct generic_fb *fb_data);
-typedef void (*fb_from_generic_t)(struct generic_fb *fb_data, struct bt_data *bt_data);
+typedef bool (*fb_from_generic_t)(struct generic_fb *fb_data, struct bt_data *bt_data);
 typedef void (*meta_init_t)(struct wired_ctrl *ctrl_data);
 typedef void (*buffer_init_t)(int32_t dev_mode, struct wired_data *wired_data);
 
@@ -585,10 +605,10 @@ void adapter_init_buffer(uint8_t wired_id);
 void adapter_bridge(struct bt_data *bt_data);
 void adapter_fb_stop_timer_start(uint8_t dev_id, uint64_t dur_us);
 void adapter_fb_stop_timer_stop(uint8_t dev_id);
-uint32_t adapter_bridge_fb(struct raw_fb *fb_data, struct bt_data *bt_data);
+bool adapter_bridge_fb(struct raw_fb *fb_data, struct bt_data *bt_data);
 void adapter_q_fb(struct raw_fb *fb_data);
 void start_rumble_sequence(uint32_t wired_id, uint32_t duration_us, int repeat_count);
-void adapter_toggle_fb(uint32_t wired_id, uint32_t duration_us);
+void adapter_toggle_fb(uint32_t wired_id, uint32_t duration_us, uint8_t lf_pwr, uint8_t hf_pwr);
 void adapter_init(void);
 void adapter_meta_init(void);
 
@@ -603,7 +623,10 @@ static inline void bt_type_update(int32_t dev_id, int32_t type, uint32_t subtype
         for (uint32_t i = 0; i < REPORT_MAX; i++) {
             atomic_clear_bit(&bt_data->base.flags[i], BT_INIT);
         }
-        printf("# %s: dev: %ld type: %ld subtype: %ld\n", __FUNCTION__, dev_id, type, subtype);
+        printf("%s: dev: %ld type: %ld subtype: %ld\n", __FUNCTION__, dev_id, type, subtype);
+        TESTS_CMDS_LOG("\"type_update\": {\"device_id\": %d, \"device_type\": %d, \"device_subtype\": %d},\n",
+            dev_id, type, subtype);
+        bt_mon_log(true, "%s: dev: %ld type: %ld subtype: %ld\n", __FUNCTION__, dev_id, type, subtype);
     }
 }
 

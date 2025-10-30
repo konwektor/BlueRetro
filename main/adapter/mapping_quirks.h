@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, Jacques Gagnon
+ * Copyright (c) 2021-2025, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 

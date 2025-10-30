@@ -452,6 +452,8 @@ static void gc_pad_cmd_hdlr(uint8_t channel, uint8_t port, uint16_t item) {
                 buf[i] = (wired_adapter.data[port].output_mask[i - 4]) ?
                     wired_adapter.data[port].output_mask[i - 4] : wired_adapter.data[port].output[i - 4];
             }
+            uint8_t trig_l = buf[10];
+            uint8_t trig_r = buf[11];
 
             /* Delay Digital trigger state until analog part is set at least 2 frames */
             if (gc_r_trig_prev_state[port] < 2) {
@@ -503,7 +505,7 @@ static void gc_pad_cmd_hdlr(uint8_t channel, uint8_t port, uint16_t item) {
             nsi_bytes_to_items_crc(channel * RMT_MEM_ITEM_NUM, &buf[4], len, &crc, STOP_BIT_2US);
             RMT.conf_ch[channel].conf1.tx_start = 1;
 
-            if (buf[10] > 0x30) {
+            if (trig_l > 0x30) {
                 if (gc_l_trig_prev_state[port] < 2) {
                     gc_l_trig_prev_state[port]++;
                 }
@@ -511,7 +513,7 @@ static void gc_pad_cmd_hdlr(uint8_t channel, uint8_t port, uint16_t item) {
             else {
                 gc_l_trig_prev_state[port] = 0;
             }
-            if (buf[11] > 0x30) {
+            if (trig_r > 0x30) {
                 if (gc_r_trig_prev_state[port] < 2) {
                     gc_r_trig_prev_state[port]++;
                 }
@@ -681,12 +683,7 @@ void nsi_init(uint32_t package) {
 
     RMT.apb_conf.fifo_mask = 1;
 
-    if (wired_adapter.system_id == N64) {
-        nsi_port_cfg(0xF);
-    }
-    else {
-        nsi_port_cfg(0x0);
-    }
+    nsi_port_cfg(0xF);
 
     for (uint32_t i = 0; i < ARRAY_SIZE(gpio_pin); i++) {
         RMT.conf_ch[rmt_ch[i][system]].conf0.div_cnt = 40; /* 80MHz (APB CLK) / 40 = 0.5us TICK */;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2023, Jacques Gagnon
+ * Copyright (c) 2019-2025, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -10,8 +10,8 @@
 #include "ps3.h"
 #include "wii.h"
 #include "ps.h"
-#include "xbox.h"
 #include "sw.h"
+#include "sw2.h"
 
 typedef void (*bt_hid_init_t)(struct bt_dev *device);
 typedef void (*bt_hid_hdlr_t)(struct bt_dev *device, struct bt_hci_pkt *bt_hci_acl_pkt, uint32_t len);
@@ -24,13 +24,11 @@ const uint8_t bt_hid_led_dev_id_map[] = {
 static const struct bt_name_type bt_name_type[] = {
 #ifndef CONFIG_BLUERETRO_GENERIC_HID_DEBUG
     {"PLAYSTATION(R)3", BT_PS3, BT_SUBTYPE_DEFAULT, 0},
-    {"Xbox Wireless Controller", BT_XBOX, BT_XBOX_XINPUT, 0},
-    {"Xbox Adaptive Controller", BT_XBOX, BT_XBOX_ADAPTIVE, 0},
+    {"Xbox Wireless Controller", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, 0},
     {"DualSense Wireless Controller", BT_PS, BT_PS5_DS, 0},
     {"Wireless Controller", BT_PS, BT_SUBTYPE_DEFAULT, 0},
     {"Nintendo RVL-CNT-01-UC", BT_WII, BT_WIIU_PRO, 0}, /* Must be before WII */
     {"Nintendo RVL-CNT-01", BT_WII, BT_SUBTYPE_DEFAULT, 0},
-    {"Lic Pro Controller", BT_SW, BT_SW_POWERA, BIT(BT_QUIRK_FACE_BTNS_ROTATE_RIGHT)},
     {"Pro Controller", BT_SW, BT_SUBTYPE_DEFAULT, 0},
     {"Joy-Con (L)", BT_SW, BT_SW_LEFT_JOYCON, 0},
     {"Joy-Con (R)", BT_SW, BT_SW_RIGHT_JOYCON, 0},
@@ -39,22 +37,23 @@ static const struct bt_name_type bt_name_type[] = {
     {"NES Controller", BT_SW, BT_SW_NES, BIT(BT_QUIRK_FACE_BTNS_ROTATE_RIGHT) | BIT(BT_QUIRK_TRIGGER_PRI_SEC_INVERT)},
     {"N64 Controller", BT_SW, BT_SW_N64, 0},
     {"MD/Gen Control Pad", BT_SW, BT_SW_MD_GEN, 0},
+    {"8Bitdo NES30 Arcade", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, BIT(BT_QUIRK_FACE_BTNS_TRIGGER_TO_8BUTTONS)},
+    {"8BitDo Arcade Stick", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, BIT(BT_QUIRK_FACE_BTNS_TRIGGER_TO_8BUTTONS)},
     {"8BitDo NGC Modkit", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, BIT(BT_QUIRK_8BITDO_GC)},
-    {"8BitDo N30 Modkit", BT_XBOX, BT_XBOX_XINPUT, BIT(BT_QUIRK_FACE_BTNS_ROTATE_RIGHT)},
-    {"8BitDo GBros Adapter", BT_XBOX, BT_8BITDO_GBROS, 0},
+    {"8BitDo N30 Modkit", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, BIT(BT_QUIRK_FACE_BTNS_ROTATE_RIGHT)},
+    {"8BitDo GBros Adapter", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, BIT(BT_QUIRK_8BITDO_GBROS)},
     {"8Bitdo N64 GamePad", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, BIT(BT_QUIRK_8BITDO_N64)},
     {"8BitDo N64 Modkit", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, BIT(BT_QUIRK_8BITDO_N64_MK)},
     {"8BitDo NEOGEO GP", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, BIT(BT_QUIRK_TRIGGER_PRI_SEC_INVERT)},
-    {"8BitDo M30 gamepad", BT_XBOX, BT_XBOX_XINPUT, BIT(BT_QUIRK_8BITDO_M30)},
-    {"8BitDo S30 Modkit", BT_XBOX, BT_XBOX_XINPUT, BIT(BT_QUIRK_8BITDO_SATURN)},
-    {"8BitDo Retro Keyboard", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, 0}, /* Need to be exluded from 8bitdo catch all */
-    {"8Bitdo", BT_XBOX, BT_XBOX_XINPUT, 0}, /* 8bitdo catch all, tested with SF30 Pro */
-    {"Retro Bit Bluetooth Controller", BT_XBOX, BT_XBOX_XINPUT, BIT(BT_QUIRK_FACE_BTNS_TRIGGER_TO_6BUTTONS) | BIT(BT_QUIRK_TRIGGER_PRI_SEC_INVERT)},
-    {"Joy Controller", BT_XBOX, BT_XBOX_XINPUT, BIT(BT_QUIRK_RF_WARRIOR)},
+    {"8BitDo M30 gamepad", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, BIT(BT_QUIRK_8BITDO_M30)},
+    {"8BitDo M30 Modkit", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, BIT(BT_QUIRK_8BITDO_M30_MODKIT)},
+    {"8BitDo S30 Modkit", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, BIT(BT_QUIRK_8BITDO_SATURN)},
+    {"Retro Bit Bluetooth Controller", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, BIT(BT_QUIRK_FACE_BTNS_TRIGGER_TO_6BUTTONS) | BIT(BT_QUIRK_TRIGGER_PRI_SEC_INVERT)},
+    {"Joy Controller", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, BIT(BT_QUIRK_RF_WARRIOR)},
     {"BlueN64 Gamepad", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, BIT(BT_QUIRK_BLUEN64_N64)},
     {"Hyperkin Pad", BT_SW, BT_SW_HYPERKIN_ADMIRAL, 0},
-    {"Stadia", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, BIT(BT_QUIRK_STADIA)},
     {"OUYA Game Controller", BT_HID_GENERIC, BT_SUBTYPE_DEFAULT, BIT(BT_QUIRK_OUYA)},
+    {"DeviceName", BT_SW2, BT_SUBTYPE_DEFAULT, 0},
 #endif
 };
 
@@ -62,27 +61,27 @@ static const bt_hid_init_t bt_hid_init_list[BT_TYPE_MAX] = {
     bt_hid_generic_init, /* BT_HID_GENERIC */
     bt_hid_ps3_init, /* BT_PS3 */
     bt_hid_wii_init, /* BT_WII */
-    bt_hid_xbox_init, /* BT_XBOX */
     bt_hid_ps_init, /* BT_PS */
     bt_hid_sw_init, /* BT_SW */
+    bt_hid_sw2_init, /* BT_SW2 */
 };
 
 static const bt_hid_hdlr_t bt_hid_hdlr_list[BT_TYPE_MAX] = {
     bt_hid_generic_hdlr, /* BT_HID_GENERIC */
     bt_hid_ps3_hdlr, /* BT_PS3 */
     bt_hid_wii_hdlr, /* BT_WII */
-    bt_hid_xbox_hdlr, /* BT_XBOX */
     bt_hid_ps_hdlr, /* BT_PS */
     bt_hid_sw_hdlr, /* BT_SW */
+    NULL, /* BT_SW2 */
 };
 
 static const bt_hid_cmd_t bt_hid_feedback_list[BT_TYPE_MAX] = {
     bt_hid_cmd_generic_rumble, /* BT_HID_GENERIC */
     bt_hid_cmd_ps3_set_conf, /* BT_PS3 */
     bt_hid_cmd_wii_set_feedback, /* BT_WII */
-    bt_hid_cmd_xbox_rumble, /* BT_XBOX */
     bt_hid_cmd_ps_set_conf, /* BT_PS */
     bt_hid_cmd_sw_set_conf, /* BT_SW */
+    bt_hid_cmd_sw2_out, /* BT_SW2 */
 };
 
 void bt_hid_set_type_flags_from_name(struct bt_dev *device, const char* name) {
@@ -99,10 +98,6 @@ void bt_hid_set_type_flags_from_name(struct bt_dev *device, const char* name) {
 }
 
 void bt_hid_init(struct bt_dev *device) {
-    // if (!atomic_test_bit(&device->flags, BT_DEV_IS_BLE)) {
-    //     bt_hci_write_link_supervision_timeout(device);
-    //     //bt_host_update_sniff_interval();
-    // }
     if (device->ids.type > BT_NONE && bt_hid_init_list[device->ids.type]) {
         bt_hid_init_list[device->ids.type](device);
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2024, Jacques Gagnon
+ * Copyright (c) 2019-2025, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -24,6 +24,7 @@
 #include "smp.h"
 #include "tools/util.h"
 #include "debug.h"
+#include "mon.h"
 #include "system/fs.h"
 #include "adapter/config.h"
 #include "adapter/gameid.h"
@@ -68,9 +69,6 @@ static uint32_t frag_size = 0;
 static uint32_t frag_offset = 0;
 static uint8_t frag_buf[1024];
 
-#ifdef CONFIG_BLUERETRO_BT_H4_TRACE
-static void bt_h4_trace(uint8_t *data, uint16_t len, uint8_t dir);
-#endif /* CONFIG_BLUERETRO_BT_H4_TRACE */
 static int32_t bt_host_load_bdaddr_from_nvs(void);
 static int32_t bt_host_load_keys_from_file(struct bt_host_link_keys *data);
 static int32_t bt_host_store_keys_on_file(struct bt_host_link_keys *data);
@@ -86,39 +84,14 @@ static esp_vhci_host_callback_t vhci_host_cb = {
     bt_host_rx_pkt
 };
 
-#ifdef CONFIG_BLUERETRO_BT_H4_TRACE
-static void bt_h4_trace(uint8_t *data, uint16_t len, uint8_t dir) {
-    if (dir)
-        printf("I ");
-    else
-        printf("O ");
-
-    printf("%06X", 0);
-    for (uint32_t i = 0; i < len; i++) {
-        printf(" %02X", data[i]);
-    }
-    printf("\n");
-}
-#endif /* CONFIG_BLUERETRO_BT_H4_TRACE */
-
 static int32_t bt_host_load_bdaddr_from_nvs(void) {
-    esp_err_t err;
-    nvs_handle_t nvs;
     int32_t ret = -1;
 
-    err = nvs_open("hw", NVS_READONLY, &nvs);
-    if (err == ESP_OK) {
-        uint8_t test_mac[6];
-        size_t size = sizeof(test_mac);
-        err = nvs_get_blob(nvs, "bdaddr", test_mac, &size);
-        if (err == ESP_OK) {
-            test_mac[5] -= 2; /* Set base mac to BDADDR-2 so that BDADDR end up what we want */
-            esp_base_mac_addr_set(test_mac);
-            printf("# %s: Using NVS MAC\n", __FUNCTION__);
-            ret = 0;
-        }
-        nvs_close(nvs);
-    }
+    // uint8_t test_mac[6] = {0x48, 0xf1, 0xeb, 0xed, 0xf4, 0x1d};
+    // test_mac[5] -= 2; /* Set base mac to BDADDR-2 so that BDADDR end up what we want */
+    // esp_base_mac_addr_set(test_mac);
+    // printf("# %s: Using NVS MAC\n", __FUNCTION__);
+    // ret = 0;
     return ret;
 }
 
@@ -214,9 +187,8 @@ static void bt_tx_task(void *param) {
                     vTaskDelay(packet[1] / portTICK_PERIOD_MS);
                 }
                 else {
-#ifdef CONFIG_BLUERETRO_BT_H4_TRACE
-                    bt_h4_trace(packet, packet_len, BT_TX);
-#endif /* CONFIG_BLUERETRO_BT_H4_TRACE */
+                    bt_mon_tx((packet[0] == BT_HCI_H4_TYPE_CMD) ? BT_MON_CMD : BT_MON_ACL_TX,
+                        packet + 1, packet_len - 1);
                     atomic_clear_bit(&bt_flags, BT_CTRL_READY);
                     esp_vhci_host_send_packet(packet, packet_len);
                 }
@@ -230,12 +202,12 @@ static void bt_tx_task(void *param) {
 }
 
 static void bt_fb_task(void *param) {
-    static bool rumble_en = false;
     uint32_t *fb_len;
     struct raw_fb *fb_data = NULL;
     uint32_t delay_cnt = BT_FB_TASK_DELAY_CNT; /* 100ms * 30 = 3sec */
 
     while(1) {
+        bool fb_changed = false;
         /* Look for rumble/led feedback data */
         while ((fb_data = (struct raw_fb *)queue_bss_dequeue(wired_adapter.input_q_hdl, &fb_len))) {
             struct bt_dev *device = NULL;
@@ -263,8 +235,7 @@ static void bt_fb_task(void *param) {
                     /* Fallthrough */
                 case FB_TYPE_RUMBLE:
                     if (bt_data) {
-                        rumble_en = true;
-                        adapter_bridge_fb(fb_data, bt_data);
+                        fb_changed = adapter_bridge_fb(fb_data, bt_data);
                         delay_cnt = 0;
                     }
                     break;
@@ -284,12 +255,12 @@ static void bt_fb_task(void *param) {
             queue_bss_return(wired_adapter.input_q_hdl, (uint8_t *)fb_data, fb_len);
         }
 
-        /* TX Feedback every ~frame, double as a keep alive */
-        if (delay_cnt-- == 0) {
+        /* TX Feedback every 10 ms if rumble on, every 3 sec otherwise */
+        if (delay_cnt-- == 0 || fb_changed) {
             for (uint32_t i = 0; i < BT_MAX_DEV; i++) {
                 struct bt_dev *device = &bt_dev[i];
 
-                if (rumble_en && atomic_test_bit(&device->flags, BT_DEV_HID_INIT_DONE)) {
+                if (atomic_test_bit(&device->flags, BT_DEV_HID_INIT_DONE)) {
                     struct bt_data *bt_data = &bt_adapter.data[device->ids.id];
 
                     bt_hid_feedback(device, bt_data->base.output);
@@ -297,7 +268,7 @@ static void bt_fb_task(void *param) {
             }
             delay_cnt = BT_FB_TASK_DELAY_CNT;
         }
-        vTaskDelay(100 / portTICK_PERIOD_MS);
+        vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 }
 
@@ -327,7 +298,12 @@ static void bt_host_task(void *param) {
         /* Update turbo mask for parallel system */
         wired_para_turbo_mask_hdlr();
 
-        vTaskDelay(16 / portTICK_PERIOD_MS);
+#ifdef CONFIG_BLUERETRO_ADAPTER_RUMBLE_DBG
+    adapter_toggle_fb(0, 150000,
+        wired_adapter.data[0].output[16], wired_adapter.data[0].output[17]);
+#endif
+
+        vTaskDelay(20 / portTICK_PERIOD_MS);
     }
 }
 
@@ -342,19 +318,19 @@ static void bt_host_acl_hdlr(struct bt_hci_pkt *bt_hci_acl_pkt, uint32_t len) {
             pkt->acl_hdr.len);
         frag_offset += pkt->acl_hdr.len;
         if (frag_offset < frag_size) {
-            printf("# %s Waiting for next fragment. offset: %ld size %ld\n", __FUNCTION__, frag_offset, frag_size);
+            //printf("# %s Waiting for next fragment. offset: %ld size %ld\n", __FUNCTION__, frag_offset, frag_size);
             return;
         }
         pkt = (struct bt_hci_pkt *)frag_buf;
         pkt_len = frag_size;
-        printf("# %s process reassembled frame. offset: %ld size %ld\n", __FUNCTION__, frag_offset, frag_size);
+        //printf("# %s process reassembled frame. offset: %ld size %ld\n", __FUNCTION__, frag_offset, frag_size);
     }
     if (bt_acl_flags(pkt->acl_hdr.handle) == BT_ACL_START
         && (pkt_len - (BT_HCI_H4_HDR_SIZE + BT_HCI_ACL_HDR_SIZE + sizeof(struct bt_l2cap_hdr))) < pkt->l2cap_hdr.len) {
         memcpy(frag_buf, (void *)pkt, pkt_len);
         frag_offset = pkt_len;
         frag_size = pkt->l2cap_hdr.len + BT_HCI_H4_HDR_SIZE + BT_HCI_ACL_HDR_SIZE + sizeof(struct bt_l2cap_hdr);
-        printf("# %s Detected fragmented frame start\n", __FUNCTION__);
+        //printf("# %s Detected fragmented frame start\n", __FUNCTION__);
         return;
     }
 
@@ -404,9 +380,8 @@ static void bt_host_tx_pkt_ready(void) {
  */
 static int bt_host_rx_pkt(uint8_t *data, uint16_t len) {
     struct bt_hci_pkt *bt_hci_pkt = (struct bt_hci_pkt *)data;
-#ifdef CONFIG_BLUERETRO_BT_H4_TRACE
-    bt_h4_trace(data, len, BT_RX);
-#endif /* CONFIG_BLUERETRO_BT_H4_TRACE */
+    bt_mon_tx((bt_hci_pkt->h4_hdr.type == BT_HCI_H4_TYPE_EVT) ? BT_MON_EVT : BT_MON_ACL_RX,
+        data + 1, len - 1);
 
 #ifdef CONFIG_BLUERETRO_BT_TIMING_TESTS
     if (atomic_test_bit(&bt_flags, BT_HOST_DBG_MODE)) {
@@ -430,59 +405,6 @@ static int bt_host_rx_pkt(uint8_t *data, uint16_t len) {
 #endif
 
     return 0;
-}
-
-void bt_host_update_sniff_interval(void) {
-    uint16_t sniff_interval = 0;
-    uint32_t bt_dev_cnt = bt_host_get_flag_dev_cnt(BT_DEV_HID_INTR_READY);
-
-    switch (bt_dev_cnt) {
-        case 0:
-            return;
-        case 1:
-            /* Do not set sniff mode if this is 1st device, exept Switch */
-            struct bt_dev *device = NULL;
-            bt_host_get_active_dev(&device);
-
-            if (device->ids.type == BT_SW) {
-                sniff_interval = 8;
-            }
-            else {
-                sniff_interval = 0;
-            }
-            break;
-        default:
-            sniff_interval = 16;
-            break;
-    }
-
-    printf("# %s bt_dev_cnt: %ld interval: %d\n", __FUNCTION__, bt_dev_cnt, sniff_interval);
-
-    for (uint32_t i = 0; i < BT_MAX_DEV; i++) {
-        struct bt_dev *device = &bt_dev[i];
-
-        if (atomic_test_bit(&device->flags, BT_DEV_HID_INTR_READY)) {
-
-            if ((sniff_interval && sniff_interval == device->sniff_interval &&
-                device->sniff_state == BT_SNIFF_SET) ||
-                (sniff_interval == 0 && device->sniff_state == BT_SNIFF_DISABLE)) {
-                continue;
-            }
-
-            switch(device->sniff_state) {
-                case BT_SNIFF_SET:
-                    bt_hci_exit_sniff_mode(device);
-                    device->sniff_state = BT_SNIFF_EXIT_PENDING;
-                    break;
-                case BT_SNIFF_DISABLE:
-                    bt_hci_sniff_mode(device, sniff_interval);
-                    device->sniff_state = BT_SNIFF_SET_PENDING;
-                    break;
-                default:
-                    break;
-            }
-        }
-    }
 }
 
 uint32_t bt_host_get_flag_dev_cnt(uint32_t flag) {
@@ -600,7 +522,7 @@ void bt_host_reset_dev(struct bt_dev *device) {
 reset_dev:
     adapter_init_buffer(dev_id);
     memset(bt_adapter.data[dev_id].raw_src_mappings, 0, sizeof(*bt_adapter.data[0].raw_src_mappings) * REPORT_MAX);
-    memset(bt_adapter.data[dev_id].reports, 0, sizeof(*bt_adapter.data[0].reports) * REPORT_MAX);
+    memset(bt_adapter.data[dev_id].reports, 0, sizeof(bt_adapter.data[0].reports));
     memset(&bt_adapter.data[dev_id].base, 0, sizeof(bt_adapter.data[0].base));
     memset(device, 0, sizeof(*device));
 
@@ -632,6 +554,8 @@ int32_t bt_host_init(void) {
 #endif
 
     bt_host_load_bdaddr_from_nvs();
+
+    bt_mon_init();
 
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
 
@@ -710,12 +634,27 @@ int32_t bt_host_store_link_key(struct bt_hci_evt_link_key_notify *link_key_notif
     return ret;
 }
 
+void bt_host_clear_le_ltk(bt_addr_le_t *le_bdaddr) {
+    for (uint32_t i = 0; i < ARRAY_SIZE(bt_host_le_link_keys.keys); i++) {
+        if (memcmp((void *)le_bdaddr, (void *)&bt_host_le_link_keys.keys[i].le_bdaddr, sizeof(*le_bdaddr)) == 0) {
+            memset(&bt_host_le_link_keys.keys[i].le_bdaddr, 0, sizeof(bt_host_le_link_keys.keys[0].le_bdaddr));
+            memset(&bt_host_le_link_keys.keys[i].ltk, 0, sizeof(bt_host_le_link_keys.keys[i].ltk));
+            memset(&bt_host_le_link_keys.keys[i].ident, 0, sizeof(bt_host_le_link_keys.keys[i].ident));
+        }
+    }
+    bt_host_store_le_keys_on_file(&bt_host_le_link_keys);
+}
+
 int32_t bt_host_load_le_ltk(bt_addr_le_t *le_bdaddr, struct bt_smp_encrypt_info *encrypt_info, struct bt_smp_master_ident *master_ident) {
     int32_t ret = -1;
     for (uint32_t i = 0; i < ARRAY_SIZE(bt_host_le_link_keys.keys); i++) {
         if (memcmp((void *)le_bdaddr, (void *)&bt_host_le_link_keys.keys[i].le_bdaddr, sizeof(*le_bdaddr)) == 0) {
-            memcpy((void *)encrypt_info, &bt_host_le_link_keys.keys[i].ltk, sizeof(*encrypt_info));
-            memcpy((void *)master_ident, &bt_host_le_link_keys.keys[i].ident, sizeof(*master_ident));
+            if (encrypt_info) {
+                memcpy((void *)encrypt_info, &bt_host_le_link_keys.keys[i].ltk, sizeof(*encrypt_info));
+            }
+            if (master_ident) {
+                memcpy((void *)master_ident, &bt_host_le_link_keys.keys[i].ident, sizeof(*master_ident));
+            }
             ret = 0;
         }
     }
@@ -793,7 +732,7 @@ void bt_host_bridge(struct bt_dev *device, uint8_t report_id, uint8_t *data, uin
         }
         bt_data->base.report_type = report_type = report->type;
         len = report->len;
-        if (report_id != bt_data->reports[report_type].id) {
+        if (report_id != bt_data->base.report_id) {
             atomic_clear_bit(&bt_data->base.flags[report_type], BT_INIT);
         }
     }

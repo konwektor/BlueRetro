@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2023, Jacques Gagnon
+ * Copyright (c) 2019-2025, Jacques Gagnon
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,6 +9,8 @@
 #include "tools/util.h"
 #include "parallel_1p.h"
 #include "soc/gpio_struct.h"
+#include "tests/cmds.h"
+#include "bluetooth/mon.h"
 #include "driver/gpio.h"
 
 #define P1_LD_UP 3
@@ -100,10 +102,10 @@ void para_1p_from_generic(int32_t dev_mode, struct wired_ctrl *ctrl_data, struct
 
         memcpy(wired_data->output, (void *)&map_tmp, sizeof(map_tmp));
 
-#ifdef CONFIG_BLUERETRO_RAW_OUTPUT
-        printf("{\"log_type\": \"wired_output\", \"btns\": [%ld, %ld]}\n",
+        TESTS_CMDS_LOG("\"wired_output\": {\"btns\": [%ld, %ld]},\n",
             map_tmp.buttons, map_tmp.buttons_high);
-#endif
+        BT_MON_LOG("\"wired_output\": {\"btns\": [%08lX, %08lX]},\n",
+            map_tmp.buttons, map_tmp.buttons_high);
     }
 }
 

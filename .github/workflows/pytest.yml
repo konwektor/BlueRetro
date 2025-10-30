@@ -10,7 +10,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/darthcloud/idf-blueretro:v5.3.0_2024-02-18
+      image: ghcr.io/darthcloud/idf-blueretro:v5.5.0_2024-12-02_gcovr
+    permissions:
+      contents: write
+      pages: write
 
     steps:
     - name: Checkout repo
@@ -19,6 +22,7 @@ jobs:
         submodules: recursive
         fetch-depth: 0
     - name: Build with ESP-IDF
+      shell: bash
       run: |
         . $IDF_PATH/export.sh
         echo "br_version=$(git describe --always --tags --dirty)" >> $GITHUB_ENV
@@ -27,8 +31,43 @@ jobs:
         cp configs/dbg/qemu sdkconfig
         idf.py build
     - name: Run pytest
+      shell: bash
       run: |
         . $IDF_PATH/export.sh
         (cd build; esptool.py --chip esp32 merge_bin --fill-flash-size 4MB -o flash_image.bin @flash_args)
-        qemu-system-xtensa -machine esp32 -drive file=build/flash_image.bin,if=mtd,format=raw -serial tcp::5555,server,nowait -display none -daemonize
+        qemu-system-xtensa -machine esp32 -drive file=build/flash_image.bin,if=mtd,format=raw -serial file:serial_log.txt -serial file:gcov_data.gcfn -display none -nic user,model=open_eth,id=lo0,hostfwd=tcp:127.0.0.1:8001-:80 -daemonize
         pytest
+    - name: Generate gcov report
+      shell: bash
+      run: |
+        . $IDF_PATH/export.sh
+        xtensa-esp32-elf-gcov-tool merge-stream gcov_data.gcfn
+        gcovr --gcov-executable xtensa-esp32-elf-gcov --html-details coverage.html
+    - name: Upload artifact
+      if: '!cancelled()'
+      uses: actions/upload-artifact@v4
+      with:
+        name: logs
+        path: |
+          serial_log.txt
+          coverage*
+        if-no-files-found: error
+    - name: Checkout gcov pages
+      uses: actions/checkout@v4
+      with:
+        repository: darthcloud/BlueRetroCoverage
+        path: ./brcov
+        token: ${{ secrets.GCOV_PAGES_PAT }}
+    - name: Upload report to GitHub Pages
+      if: ${{ (github.repository == 'darthcloud/BlueRetro') }}
+      shell: bash
+      run : |
+        git config --global user.name "GitHubAction"
+        git config --global user.email "octocat@github.com"
+        cd brcov
+        git rm coverage*
+        cp ../coverage* ./
+        cp coverage.html index.html
+        git add -A
+        git commit -m "Update coverage report"
+        git push
