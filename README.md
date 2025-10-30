@@ -1,78 +1,48 @@
 
 
-This is a modified version of BlueRetro with support for sending commands to an OGX360 over I2C. 
+This is a modified version of BlueRetro with support for sending commands to an OGX360 over I2C.
+
 See https://github.com/konwektor/ogx360 for a compatible build of ogx360.
 <BR>
 
-v24.04 Latest
 
-Based on BlueRetro v24.04
-
-    Fixed rumble with i2c repeated start - gamepads are not hanging anymore for 1 sec - tested with wiiu and ps4
-    Added hw2 internal/external support
-    Added port detection in hw2
-    Added rubmle feedback for actually used port - push xbox button and gamepad will rumble shortly x-times , where x is port number used
-
-This version need also updating arduino firmware in case of use hw2, use mine fork at https://github.com/konwektor/ogx360.
-hw1 doesn`t need arduino firmware update if You have used already ogx360 fork for BlueRetro support.
-
-Small detailed info in [!compiled](https://github.com/konwektor/BlueRetro/tree/master/!compiled).
-<br>
-This can be compiled the same as BlueRetro. <br>
-Copy /configs/hw1/ogx360 to Your /Blueretro/sdkconfig start esp-idf (v5.1.2) and rund "esp.py build".
-
-Or just go to [Releases](https://github.com/konwektor/BlueRetro/releases), and download already compiled files.
-<BR>
-# Need help? Found Bug? Any Ideas?
-* [Open a GitHub discussion](https://github.com/konwektor/BlueRetro/discussions)
-
-<BR>
+# Update to Blueretro 25.04
 
 
-
-- All Xbox one x/s series x/s controllers working with rumble, no delay no stuck.
-- Wiiu pro rumble tested and working
-- Ps4 rumble tested and working
-
-- All other bluetooth gamepads supported by Blueretro should work - not tested - got any???? Give me feedback.
-
-<BR>
-
-
-<BR>
- 
- - look to [Davidxgames](https://github.com/davidxgames) or [XGAMES VIDEOJUEGOS](https://www.youtube.com/@XGAMESVIDEOJUEGOS),  - video how to do mod, assembly instruction and compiled files ready to go  (based o BlueRetro 1.8.x I think) -channel in spanish.
-
-    Respect and many BIG Thanks goes to Ervin: [Eolvera85](https://github.com/eolvera85):- author of PS5 support patch.
-
-
-
-<BR>
-
- 
-    
-
-update to 25.04
-
-This is a modified version of BlueRetro with support for sending commands to an OGX360 over I2C. 
-See https://github.com/konwektor/ogx360 for a compatible build of ogx360.
-<BR>
 
 
 quick info:
 
 Based on BlueRetro v25.04
 
-    Added hw2 internal/external support
-    Added port detection in hw2
-    power on/off using gamepad
-    Added "virtual menu" with rubmle feedback for ping/ disconnect arduino modules - push xbox button and gamepad will rumble shortly, then dpad-l/r/u/d
-    ping/disconnect, start for double rumble , back-quit V-menu.
+    Tweak hw2 internal support
+    Tweak behavie of port detection in hw2 
+    hw2 power on/off using gamepad combo
+    hw2 DVD tray eject using gamepad combo
+    hw2 DVD tray button : 
+    push = tray eject
+    1sec < hold = BT pairing if no controller connected,or disconnect all connected already BT devices alreaady connected
+    3sec < hold = start BT pairing , 
+    6sec < hold = esp32 firmware reset 
+    
+    Added "virtual menu" with rumble feedback for simple debug i2c bus - 
+    push Xbox button and gamepad will rumble shortly,- enters in V-menu
+    Then Dpad-L/R/U/D do :  
+    ping(legacy driver) / disconnect(legacy driver)/ping (low level i2c driver) / disconnect(low level i2c driver)
+    Start is for double rumble,
+    A - initialize legacy i2c driver, B,X,Y - sending  1byte to output(xbox).
+    During staying inside V-menu only A,B,X,Y are sending bytes to adapter, all other buttons are invisible for console.
+    Back button - quit V-menu, and bring back support for all buttons. 
+    This function is  for checkin in i2c communication how arduinos modules react for connect/disconnect overflow and how xbox see it.  
+    
 This version need also updating arduino firmware in case of use hw2, use mine fork at https://github.com/konwektor/ogx360.
-hw1 doesn`t need arduino firmware update if You have used already ogx360 fork for BlueRetro support.
+If You already got software for BlueRetro support in arduino, and staying by hw1 - no update is needed.
 
 Small detailed info in [!compiled](https://github.com/konwektor/BlueRetro/tree/master/!compiled).
 <br>
+Hardware build details, and all other infos i will upload in next week.
+
+
 This can be compiled the same as BlueRetro. <br>
 Copy /configs/hw1/ogx360 to Your /Blueretro/sdkconfig start esp-idf (v5.1.2) and rund "esp.py build".
 
