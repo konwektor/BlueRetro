@@ -6,15 +6,16 @@ This is a modified version of BlueRetro with support for sending commands to an 
 See https://github.com/konwektor/ogx360 for a compatible build of ogx360.
 <BR>
 
-v24.04 Latest
 
-Based on BlueRetro v24.04
+quick info:
 
-    Fixed rumble with i2c repeated start - gamepads are not hanging anymore for 1 sec - tested with wiiu and ps4
+Based on BlueRetro v25.04
+
     Added hw2 internal/external support
     Added port detection in hw2
-    Added rubmle feedback for actually used port - push xbox button and gamepad will rumble shortly x-times , where x is port number used
-
+    power on/off using gamepad
+    Added "virtual menu" with rubmle feedback for ping/ disconnect arduino modules - push xbox button and gamepad will rumble shortly, then dpad-l/r/u/d
+    ping/disconnect, start for double rumble , back-quit V-menu.
 This version need also updating arduino firmware in case of use hw2, use mine fork at https://github.com/konwektor/ogx360.
 hw1 doesn`t need arduino firmware update if You have used already ogx360 fork for BlueRetro support.
 
@@ -34,7 +35,7 @@ Or just go to [Releases](https://github.com/konwektor/BlueRetro/releases), and d
 
 - All Xbox one x/s series x/s controllers working with rumble, no delay no stuck.
 - Wiiu pro rumble tested and working
-- Ps4 rumble tested and working
+- Ps4 , ps5 rumble tested and working
 
 - All other bluetooth gamepads supported by Blueretro should work - not tested - got any???? Give me feedback.
 
