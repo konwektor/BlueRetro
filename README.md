@@ -1,10 +1,40 @@
+# BROGX
 
+**BROGX allows playing on Xbox completely wirelessly with all Bluetooth gamepads supported by BlueRetro.**
 
-This is a modified version of BlueRetro with support for sending commands to an OGX360 over I2C.
+Build from 2 parts
+- one ESP-WROOM-32 chip/ESP32-WROOM32d DevkitC V4. module 
+- max.4 ATMEGA32U4 / Arduino pro micro/leonardo 
 
-See https://github.com/konwektor/ogx360 for a compatible build of ogx360.
-<BR>
+This project combines [BlueRetro](https://github.com/darthcloud/BlueRetro) by DarthCloud and [OGX360](https://github.com/Ryzee119/ogx360) by Ryzee119.<br>
+Based on code and concept by netham45: https://github.com/netham45/BlueRetro.<br>
+An ESP32 allows connecting Bluetooth gamepads, and with modified BlueRetro software, data is sent over I2C to an Arduino.<br>
+The Arduino communicates with the Xbox over USB. A modification to the OGX360 software removes the master device and sets all as slaves.
 
+## Main Features
+
+- **[Bluetooth gamepads supported by BlueRetro](https://github.com/darthcloud/BlueRetro/wiki/Controller-pairing-guide#1---list-of-tested-bluetooth-devices)**
+- **[Web Config](https://blueretro.io/)**  
+  Works only partially for BROGX. The adapter is not officially supported by DarthCloud. TODO: Add Xbox to the game system list to unlock more functions.
+- ~~**Port detection via Current Trigger**~~
+- **Port detection via Shield Detect**  
+  Detects when a physical controller is connected and disconnects the Bluetooth controller on this port to make room for a wired one.
+- **Xbox Power ON/OFF with Bluetooth Controller**  
+  Allows turning the console on and off with the controller (only in HW2 internal builds under specific conditions).
+- **Port Status LED**  
+  Indicates the current status of each controller port.
+  - Solid - BT controller connected,
+  - Pulsing - Bluetooth inquiry mode enable (new pairing).
+  - Off - no controller or port occupied by wired gamepad
+- **Global Status LED**  
+  Indicates the overall status of the ESP.
+  - Solid: An error occured, try power cycle, check serial logs for detail.
+  - Pulsing: Bluetooth inquiry mode enable (new pairing).
+  - Off: No error and Bluetooth inquiry mode disabled.
+
+### READ THIS FIRST
+
+[User manual](Instructions/README.md) — Information about the adapter, programming, and hardware build details.
 
 # Update to Blueretro 25.04
 
@@ -38,16 +68,12 @@ Based on BlueRetro v25.04
 This version need also updating arduino firmware in case of use hw2, use mine fork at https://github.com/konwektor/ogx360.
 If You already got software for BlueRetro support in arduino, and staying by hw1 - no update is needed.
 
-Small detailed info in [!compiled](https://github.com/konwektor/BlueRetro/tree/master/!compiled).
-<br>
-Hardware build details, and all other infos i will upload in next week.
-
-
 This can be compiled the same as BlueRetro. <br>
 Copy /configs/hw1/ogx360 to Your /Blueretro/sdkconfig start esp-idf (v5.1.2) and rund "esp.py build".
 
 Or just go to [Releases](https://github.com/konwektor/BlueRetro/releases), and download already compiled files.
-<BR>
+<BR>  
+
 # Need help? Found Bug? Any Ideas?
 * [Open a GitHub discussion](https://github.com/konwektor/BlueRetro/discussions)
 
