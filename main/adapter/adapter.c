@@ -47,7 +47,7 @@ struct bt_adapter bt_adapter = {0};
 struct wired_adapter wired_adapter = {0};
 struct sequence sequence = {0};
 static uint32_t adapter_out_mask[WIRED_MAX_DEV] = {0};
-static bool rumble_mute = false;    //move or not? to wired_data struct - adapter_toggle_fb sets rumble_mute for itself not global for all dev.
+static bool rumble_mute = false;
 
 static uint32_t btn_id_to_btn_idx(uint8_t btn_id) {
     if (btn_id < 32) {

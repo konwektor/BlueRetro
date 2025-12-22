@@ -166,30 +166,26 @@ static inline uint32_t get_port_led_pin(uint32_t index) {
 
 static void internal_flag_init(void) {
 #ifdef CONFIG_BLUERETRO_HW2
-       #ifdef CONFIG_BLUERETRO_SYSTEM_OGX360
-        hw_config.external_adapter = 0;  // always internal adapter for hw2 and ogx360 
-    #else
-        if (hw_config.power_pin_polarity) {
-            if (!gpio_get_level(POWER_ON_PIN) && gpio_get_level(RESET_PIN)) {
-                hw_config.external_adapter = 1;
-            }
-        } else {
-            if (gpio_get_level(POWER_ON_PIN) && gpio_get_level(RESET_PIN)) {
-                hw_config.external_adapter = 1;
-            }
+    if (hw_config.power_pin_polarity) {
+        if (!gpio_get_level(POWER_ON_PIN) && gpio_get_level(RESET_PIN)) {
+            hw_config.external_adapter = 1;
         }
-    #endif
+    }
+    else {
+        if (gpio_get_level(POWER_ON_PIN) && gpio_get_level(RESET_PIN)) {
+            hw_config.external_adapter = 1;
+        }
+    }
 #else
     hw_config.external_adapter = 1;
 #endif
-
     if (hw_config.external_adapter) {
         printf("# %s: External adapter\n", __FUNCTION__);
-    } else {
+    }
+    else {
         printf("# %s: Internal adapter\n", __FUNCTION__);
     }
 }
-
 
 static void port_led_pulse(uint32_t pin) {
     if (pin) {
@@ -501,7 +497,6 @@ static void sys_mgr_power_on(void) {
 
 static void sys_mgr_power_off(void) {
     bt_host_disconnect_all();
-
 #ifdef CONFIG_BLUERETRO_HW2
     #ifdef CONFIG_BLUERETRO_SYSTEM_OGX360
     //logic for hw2 and ogx360
@@ -761,11 +756,7 @@ void sys_mgr_init(uint32_t package) {
     io_conf.pin_bit_mask = 1ULL << power_off_pin;
     gpio_config(&io_conf);
 
-    #ifdef CONFIG_BLUERETRO_SYSTEM_OGX360
-    gpio_set_level(RESET_PIN, 0);
-    #else
     gpio_set_level(RESET_PIN, 1);
-    #endif
     if (hw_config.reset_pin_od) {
         io_conf.mode = GPIO_MODE_OUTPUT_OD;
     }
