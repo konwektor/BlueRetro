@@ -14,10 +14,11 @@ The Arduino communicates with the Xbox over USB. A modification to the OGX360 so
 ## Main Features
 
 - **[Bluetooth gamepads supported by BlueRetro](https://github.com/darthcloud/BlueRetro/wiki/Controller-pairing-guide#1---list-of-tested-bluetooth-devices)**
-- **[Web Config](https://blueretro.io/)**  
-  Works only partially for BROGX. The adapter is not officially supported by DarthCloud. TODO: Add Xbox to the game system list to unlock more functions.
+- **Web Config**
+  (https://konwektor.github.io/BlueRetroWebCfg/)  
+ Added OGX360 to the game system list to unlock more functions (key bindings, combo shortcuts, etc.) - works same way as orginal webcfg for BlueRetro
 - ~~**Port detection via Current Trigger**~~
-- **Port detection via Shield Detect**  
+- **Port detection via isolated port Shield**  
   Detects when a physical controller is connected and disconnects the Bluetooth controller on this port to make room for a wired one.
 - **Xbox Power ON/OFF with Bluetooth Controller**  
   Allows turning the console on and off with the controller (only in HW2 internal builds under specific conditions).
@@ -34,7 +35,7 @@ The Arduino communicates with the Xbox over USB. A modification to the OGX360 so
 
 ### READ THIS FIRST
 
-[User manual](Instructions/README.md) — Information about the adapter, programming, and hardware build details.
+[User manual](Instructions/README.md) â€” Information about the adapter, programming, and hardware build details.
 
 # Update to Blueretro 25.04
 
@@ -90,15 +91,7 @@ Or just go to [Releases](https://github.com/konwektor/BlueRetro/releases), and d
 <BR>
 
 
-<BR>
- 
- - look to [Davidxgames](https://github.com/davidxgames) or [XGAMES VIDEOJUEGOS](https://www.youtube.com/@XGAMESVIDEOJUEGOS),  - video how to do mod, assembly instruction and compiled files ready to go  (based o BlueRetro 1.8.x I think) -channel in spanish.
 
-    Respect and many BIG Thanks goes to Ervin: [Eolvera85](https://github.com/eolvera85):- author of PS5 support patch.
-
-
-
-<BR>
 
  
     
