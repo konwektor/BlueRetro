@@ -14,6 +14,10 @@
 #include "adapter/wired/wired.h"
 #include "adapter/wireless/wireless.h"
 #include "ogx360.h"
+#include "esp_timer.h"
+#include "esp_log.h"
+
+//static const char *TAG = "PERF";
 
 
 #define BUTTON_MASK_SIZE 32
@@ -220,34 +224,36 @@ void ogx360_ctrl_special_action(struct wired_ctrl *ctrl_data, struct wired_data 
                 // Obsłuż nowo wciśnięte przyciski
                 if (new_press & BIT(PAD_LD_LEFT)) {
                     ets_printf("ctrl_special_action:D_LEFT (NEW PRESS)\n");
-                    ogx360_i2c_ping1(wired_data->index);
+                    //ogx360_i2c_ping1(wired_data->index);
                   //duke_out.wButtons |= BIT(ogx360_digital_btns_mask[OGX360_D_LEFT]);
 
                 }
                 else if (new_press & BIT(PAD_LD_RIGHT)) {  
                     ets_printf("ctrl_special_action:D_RIGHT (NEW PRESS)\n");
-                    ogx360_i2c_disconnectPacket1(wired_data->index);
+                   // ogx360_ll_process(wired_data->index);
                 //  duke_out.wButtons |= BIT(ogx360_digital_btns_mask[OGX360_D_RIGHT]);
 
                 }
                 else if (new_press & BIT(PAD_LD_DOWN)) {  
                     ets_printf("ctrl_special_action:D_DOWN (NEW PRESS)\n");
-                    ogx360_i2c_disconnect_ll();
+                  //  ogx360_i2c_disconnect_ll();
                   // duke_out.wButtons |= 0x0002;
                 }
 
                 else if (new_press & BIT(PAD_LD_UP)) {  
                     ets_printf("ctrl_special_action:D_UP (NEW PRESS)\n"); 
-                     ogx360_i2c_ping_ll();
+                   // ogx360_ll_process(wired_data->index); 
                    //uke_out.wButtons |= BIT(ogx360_digital_btns_mask[OGX360_D_UP]);
                 }
                 
+    
+   
                 else if (new_press & BIT(PAD_RB_LEFT)) {
                     int analog_index = ogx360_analog_btns_mask[PAD_RB_LEFT];
                     if (analog_index != -1) {
                         duke_out.analogButtons[analog_index] = 0xFF;
                         ets_printf("ctrl_special_action:PAD_RB_LEFT/X (NEW PRESS)\n");
-                        ogx360_ll_process(wired_data->index);              
+                       // ogx360_ll_process(wired_data->index);              
                     }
                 }
                 else if (new_press & BIT(PAD_RB_RIGHT)) {
@@ -255,7 +261,7 @@ void ogx360_ctrl_special_action(struct wired_ctrl *ctrl_data, struct wired_data 
                     if (analog_index != -1) {
                         duke_out.analogButtons[analog_index] = 0xFF;
                         ets_printf("ctrl_special_action:PAD_RB_RIGHT/B (NEW PRESS)\n");
-                        ogx360_ll_process(wired_data->index);       
+                      //  ogx360_ll_process(wired_data->index);       
                     }
                 }
                 else if (new_press & BIT(PAD_RB_DOWN)) {
@@ -263,7 +269,7 @@ void ogx360_ctrl_special_action(struct wired_ctrl *ctrl_data, struct wired_data 
                     if (analog_index != -1) {
                         duke_out.analogButtons[analog_index] = 0xFF;
                         ets_printf("ctrl_special_action:PAD_RB_DOWN/A (NEW PRESS)\n");
-                        ogx360_initialize_i2c(); 
+                      //  ogx360_ll_process(wired_data->index); 
 
                     }
                 }
@@ -273,7 +279,7 @@ void ogx360_ctrl_special_action(struct wired_ctrl *ctrl_data, struct wired_data 
                     if (analog_index != -1) {
                         duke_out.analogButtons[analog_index] = 0xFF;
                         ets_printf("ctrl_special_action:PAD_RB_UP/Y (NEW PRESS)\n");
-                        ogx360_ll_process(wired_data->index);
+                      //  ogx360_ll_process(wired_data->index);
                     }
                 }
                 else if (new_press & BIT(PAD_MM)) {
@@ -436,10 +442,26 @@ void ogx360_ctrl_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *w
     }
      memcpy(wired_data->output, (void *)&duke_out, sizeof(duke_out));
      ogx360_ctrl_special_action(ctrl_data, wired_data);
-     
-    if (!atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE2)) {
-        ogx360_process(wired_data->index);
-    }
+
+    // static uint32_t call_count = 0;
+    //static int64_t last_time = 0;
+
+     //ogx360_ll_process(wired_data->index);
+
+     //call_count++;
+    //int64_t now = esp_timer_get_time(); // czas w mikrosekundach
+    
+   // if (now - last_time >= 1000000) { // Jeśli upłynęła 1 sekunda (1 000 000 us)
+    //    float frequency = (float)call_count * 1000000.0f / (now - last_time);
+    //    ESP_LOGI(TAG, "Częstotliwość: %.2f Hz", frequency);
+     //   
+        // Resetowanie licznika
+    //    call_count = 0;
+    //    last_time = now;
+   // }
+    //if (!atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE2)) {
+    //    ogx360_process(wired_data->index);
+    //}
     
 }
 
@@ -474,8 +496,6 @@ void ogx360_fb_to_generic(int32_t dev_mode, struct raw_fb *raw_fb_data, struct g
         // Format: [0x00, 0x06, left_low, left_high, right_low, right_high]
         fb_data->state = (raw_fb_data->data[0] || raw_fb_data->data[1] ? 1 : 0);
         fb_data->lf_pwr = raw_fb_data->data[0];
-        fb_data->hf_pwr = raw_fb_data->data[1];
-       
-       
+        fb_data->hf_pwr = raw_fb_data->data[1];       
     }
 }

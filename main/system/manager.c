@@ -116,12 +116,14 @@ static inline uint32_t sense_port_is_empty(uint32_t index) {
 }
 
 static inline void set_power_on(uint32_t state) {
+     printf("###  %s: Callled : set_power_on(%ld)| POWER_ON_PIN IS NOW: | LEVEL: %d\n", __FUNCTION__, state, gpio_get_level(POWER_ON_PIN));
     if (hw_config.power_pin_polarity) {
         gpio_set_level(POWER_ON_PIN, !state);
     }
     else {
         gpio_set_level(POWER_ON_PIN, state);
     }
+    printf("###  %s: after : set_power_on(%ld)| POWER_ON_PIN IS NOW: | LEVEL: %d\n", __FUNCTION__, state, gpio_get_level(POWER_ON_PIN));
 }
 
 static inline void set_power_off(uint32_t state) {
@@ -165,6 +167,10 @@ static inline uint32_t get_port_led_pin(uint32_t index) {
 }
 
 static void internal_flag_init(void) {
+
+    printf("###  %s: GPIO[%d]| POWER_ON_PIN | LEVEL: %d\n", __FUNCTION__, POWER_ON_PIN, gpio_get_level(POWER_ON_PIN));
+    printf("###  %s: GPIO[%d]| RESET_PIN | LEVEL: %d\n", __FUNCTION__, RESET_PIN, gpio_get_level(RESET_PIN));
+    
 #ifdef CONFIG_BLUERETRO_HW2
         if (hw_config.power_pin_polarity) {
             if (!gpio_get_level(POWER_ON_PIN) && gpio_get_level(RESET_PIN)) {
@@ -173,6 +179,7 @@ static void internal_flag_init(void) {
         } else {
             if (gpio_get_level(POWER_ON_PIN) && gpio_get_level(RESET_PIN)) {
                 hw_config.external_adapter = 1;
+                
             }
         }
   
@@ -228,21 +235,31 @@ static void power_on_hdl(void) {
     curr = sys_mgr_get_power();
     if (curr) {
         /* System is power on */
-        bt_hci_inquiry_override(0);
-
+         /* Inquiry policy */
+        //if (config.global_cfg.inquiry_mode == INQ_MANUAL) { 
+            /* Hard block auto inquiry */
+          //  bt_hci_inquiry_override(1);
+       // }
+       // else {
+            bt_hci_inquiry_override(0);
+        //}
+        
         if (bt_host_get_active_dev(&not_used) < 0) {
             /* No Bt device */
             uint32_t port_cnt_loc = 0;
-
+            
             for (uint32_t i = 0; i < hw_config.port_cnt; i++) {
                 if (sense_port_is_empty(i)) {
                     port_cnt_loc++;
                 }
             }
+
             if (port_cnt_loc == hw_config.port_cnt) {
                 /* No wired controller */
-                if (!bt_hci_get_inquiry()) {
-                    bt_hci_start_inquiry();
+                if (config.global_cfg.inquiry_mode != INQ_MANUAL) {
+                    if (!bt_hci_get_inquiry()) {
+                        bt_hci_start_inquiry();
+                    }
                 }
             }
         }
@@ -408,6 +425,9 @@ static void boot_btn_hdl(void) {
                     check_qdp = 1;
                     break;
                 case SYS_MGR_BTN_STATE1:
+                // bt_hci_stop_inquiry();
+                  //  bt_hci_inquiry_override(1);
+
                     if (bt_hci_get_inquiry()) {
                         bt_hci_stop_inquiry();
                     }
@@ -416,6 +436,7 @@ static void boot_btn_hdl(void) {
                     }
                     break;
                 case SYS_MGR_BTN_STATE2:
+                 //   bt_hci_inquiry_override(0);
                     bt_hci_start_inquiry();
                     break;
                 default:
@@ -427,16 +448,19 @@ static void boot_btn_hdl(void) {
             /* System is off */
             switch (state) {
                 case SYS_MGR_BTN_STATE0:
+                #ifdef CONFIG_BLUERETRO_SYSTEM_OGX360
+                    sys_mgr_reset(); //closer to legacy function: now EJECT_SW powers up console and ejects tray 
+                    #else
                     sys_mgr_power_on();
+                #endif          
                     break;
-                default:
+                default: //glitched coz bad timings - power up only - TODO timings ,or rework completly for smth usefull
                     set_reset(0);
                     sys_mgr_power_on();
                     set_reset(1);
                     break;
             }
         }
-
         set_leds_as_btn_status(0);
         inhibit_cnt = INHIBIT_CNT;
     }
@@ -474,17 +498,27 @@ static void sys_mgr_task(void *arg) {
 }
 
 static void sys_mgr_reset(void) {
+    printf("###  %s: | RESET_PIN IS NOW LEVEL: %d\n", __FUNCTION__, gpio_get_level(RESET_PIN));
     set_reset(0);
+    printf("###  %s: Callled : set_reset(0) | RESET_PIN IS NOW LEVEL: %d\n", __FUNCTION__, gpio_get_level(RESET_PIN));
     vTaskDelay(hw_config.reset_pin_pulse_ms / portTICK_PERIOD_MS);
+    printf("###  %s: | RESET_PIN IS NOW LEVEL: %d\n", __FUNCTION__, gpio_get_level(RESET_PIN));
     set_reset(1);
+    printf("###  %s: Callled : set_reset(1) | RESET_PIN IS NOW LEVEL: %d\n", __FUNCTION__, gpio_get_level(RESET_PIN));
+    vTaskDelay(hw_config.reset_pin_pulse_ms / portTICK_PERIOD_MS);
+    printf("###  %s: taskdelay | RESET_PIN IS NOW LEVEL: %d\n", __FUNCTION__, gpio_get_level(RESET_PIN));
 }
 
 static void sys_mgr_inquiry_toggle(void) {
     if (bt_hci_get_inquiry()) {
+        /* Stop inquiry and keep it blocked */
         bt_hci_stop_inquiry();
+       // bt_hci_inquiry_override(1);
     }
     else {
-        bt_hci_start_inquiry();
+        /* Manual start*/
+      //  bt_hci_inquiry_override(0); // disable inquiry start blo
+        bt_hci_start_inquiry(); //start inquiry 
     }
 }
 
@@ -501,11 +535,11 @@ static void sys_mgr_power_off(void) {
 
 #ifdef CONFIG_BLUERETRO_HW2
     #ifdef CONFIG_BLUERETRO_SYSTEM_OGX360
-    //logic for hw2 and ogx360
+    //HW2 and OGX360
         set_power_on(1); 
         vTaskDelay(hw_config.power_pin_pulse_ms / portTICK_PERIOD_MS);  
         set_power_on(0);  
-    #else  // Logic for HW2 only without OGX360
+    #else  //  HW2 only without OGX360
         if (hw_config.power_pin_is_hold) {
             set_power_on(0);
         } else {
@@ -660,13 +694,14 @@ void sys_mgr_init(uint32_t package) {
             hw_config.port_cnt = 4;
             break;
 		case OGX360:
-            hw_config.power_pin_pulse_ms = 40,
+            hw_config.power_pin_pulse_ms = 40;
+            hw_config.reset_pin_pulse_ms = 40;
             hw_config.port_cnt = 4;
-            hw_config.power_pin_polarity = 1;
-            //hw_config.hotplug = 1;
-            hw_config.power_pin_od = 1;//Back to OD confguration -simpler hardware build (HW2 internal) without n-mosfets
-            hw_config.reset_pin_od = 1;//
-            hw_config.reset_pin_polarity = 0; 
+            hw_config.hotplug = 1; //
+            hw_config.power_pin_polarity = 1;  //Back to OD confguration 
+            hw_config.power_pin_od = 1;		   //littlebit less complicated internal  hardware build (HW2 internal)
+            hw_config.reset_pin_od = 1;		   //integration with xbox front panel buttons at minimum level
+            hw_config.reset_pin_polarity = 0; //requires only 2 diodes
             break;
         case DC:
         case GC:
@@ -745,32 +780,34 @@ void sys_mgr_init(uint32_t package) {
 
 #ifdef CONFIG_BLUERETRO_HW2
 	#ifdef CONFIG_BLUERETRO_SYSTEM_OGX360
-	gpio_set_level(POWER_ON_PIN, 1);
-	#endif
+        gpio_set_level(POWER_ON_PIN, 1); //Unconventional set pin to 1 before gpio config update - avoid random console power ups during changing pin from input to output
+    #endif
     if (hw_config.power_pin_od) {
-        io_conf.mode = GPIO_MODE_OUTPUT_OD;
+        io_conf.mode = GPIO_MODE_INPUT_OUTPUT_OD;
     }
     else {
         io_conf.mode = GPIO_MODE_OUTPUT;
     }
-    set_power_on(0);
+   // #ifndef CONFIG_BLUERETRO_SYSTEM_OGX360
+    //    set_power_on(0);
+    //#endif
     io_conf.pin_bit_mask = 1ULL << POWER_ON_PIN;
     gpio_config(&io_conf);
 
-    set_power_off(0);
+    set_power_off(0); // unused - TODO: transform into smth usefull.. maybe hardware arduinos reset 
     io_conf.pin_bit_mask = 1ULL << power_off_pin;
     gpio_config(&io_conf);
-    
-    gpio_set_level(RESET_PIN, 1);   
+        
+    gpio_set_level(RESET_PIN, 1);  // same as in POWER_ON_PIN: anti random power up 
     if (hw_config.reset_pin_od) {
-        io_conf.mode = GPIO_MODE_OUTPUT_OD;
+        io_conf.mode = GPIO_MODE_INPUT_OUTPUT_OD;
     }
     else {
         io_conf.mode = GPIO_MODE_OUTPUT;
     }
     io_conf.pin_bit_mask = 1ULL << RESET_PIN;
     gpio_config(&io_conf);
-
+    
     if (hw_config.ports_sense_p3_p4_as_output) {
         /* Wii-ext got a sense line that we need to control */
         if (hw_config.ports_sense_output_od) {
