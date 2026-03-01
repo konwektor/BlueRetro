@@ -371,6 +371,7 @@ static void boot_btn_hdl(void) {
         if (check_qdp && sys_mgr_get_power() && sys_mgr_get_boot_btn()) {
             sys_mgr_power_off();
             check_qdp = 0;
+            printf("Quick double press triggered\n");
         }
         return;
     }

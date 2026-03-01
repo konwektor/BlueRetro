@@ -216,6 +216,7 @@ void bt_hid_ps_init(struct bt_dev *device) {
 #endif
 }
 
+// RX handler for bluetooth data from Playstation controller
 void bt_hid_ps_hdlr(struct bt_dev *device, struct bt_hci_pkt *bt_hci_acl_pkt, uint32_t len) {
     uint32_t hidp_data_len = len - (BT_HCI_H4_HDR_SIZE + BT_HCI_ACL_HDR_SIZE
                                     + sizeof(struct bt_l2cap_hdr) + sizeof(struct bt_hidp_hdr));

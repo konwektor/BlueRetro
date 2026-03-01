@@ -676,6 +676,7 @@ static unsigned gc_isr(unsigned cause) {
     return 0;
 }
 
+// Initializes Remote Control Transceiver (RMT) channels and initialize the callback for interrupts. 
 void nsi_init(uint32_t package) {
     uint32_t system = (wired_adapter.system_id == N64) ? 0 : 1;
 
@@ -717,6 +718,18 @@ void nsi_init(uint32_t package) {
     intexc_alloc_iram(ETS_RMT_INTR_SOURCE, 19, wired_adapter.system_id == N64 ? n64_isr : gc_isr);
 }
 
+// https://docs.espressif.com/projects/esp-idf/en/v5.5.3/esp32/api-reference/peripherals/rmt.html
+// There are 4 channels RMT.conf_ch[rmt_ch[i]] each associated with a GPIO pin. I think the 
+// console is polling the GPIO/data line which triggers a RMT interrupt. The interrupt callsback gc_isr, 
+// which takes the wired_adapter.data, and converts it into valid data sent back over the wire to the console.
+// It makes sense that the GC and N64 both reside in this code, since Google says they use the same protocol.
+// Update: Tested on console proving my theory correct. Can also tap the GPIO pin with a 3.3V signal and see gc_isr trigger.
+
+/*
+* "The GameCube controller protocol is a proprietary, 3.3V single-wire, bidirectional serial protocol derived from the Nintendo 64. 
+*  It operates at 200–250 kHz using open-drain signaling with a pull-up resistor. The console sends a 24-bit poll, and the controller 
+*  responds with 8 bytes of data (analog sticks, buttons, and triggers)." - https://jefflongo.dev/posts/gc-controller-reverse-engineering-part-1
+*/
 void nsi_port_cfg(uint16_t mask) {
     uint32_t system = (wired_adapter.system_id == N64) ? 0 : 1;
 
