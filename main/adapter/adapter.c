@@ -415,10 +415,10 @@ void IRAM_ATTR adapter_init_buffer(uint8_t wired_id) {
         wired_init_buffer(config.out_cfg[wired_id].dev_mode, &wired_adapter.data[wired_id]);
     }
 }
-
+// RX handler for all types of bluetooth controller data
 void adapter_bridge(struct bt_data *bt_data) {
     uint32_t out_mask = 0;
-
+// Convert the bluetooth data to a generic wireless input type
     if (bt_data->base.pids->type != BT_NONE) {
         if (wireless_to_generic(bt_data, ctrl_input)) {
             /* Unsupported report */
@@ -435,6 +435,7 @@ void adapter_bridge(struct bt_data *bt_data) {
                 return;
             }
 
+            // Convert the generic wireless input to generic wired output
             adapter_out_mask[bt_data->base.pids->out_idx] =
                 out_mask = adapter_mapping(&config.in_cfg[bt_data->base.pids->out_idx]);
 
@@ -447,6 +448,7 @@ void adapter_bridge(struct bt_data *bt_data) {
             for (uint32_t i = 0; out_mask; i++, out_mask >>= 1) {
                 if (out_mask & 0x1) {
                     ctrl_output[i].index = i;
+                    // Convert the generic wired input to specific controller wired data type
                     wired_from_generic(config.out_cfg[i].dev_mode, &ctrl_output[i], &wired_adapter.data[i]);
                 }
             }
