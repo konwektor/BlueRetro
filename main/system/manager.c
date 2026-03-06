@@ -427,7 +427,11 @@ static void boot_btn_hdl(void) {
             /* System is off */
             switch (state) {
                 case SYS_MGR_BTN_STATE0:
+                #ifdef CONFIG_BLUERETRO_SYSTEM_OGX360
+                    sys_mgr_reset(); //closer to legacy function: now EJECT_SW powers up console and ejects tray 
+                    #else
                     sys_mgr_power_on();
+                #endif          
                     break;
                 default:
                     set_reset(0);
@@ -660,13 +664,22 @@ void sys_mgr_init(uint32_t package) {
             hw_config.port_cnt = 4;
             break;
 		case OGX360:
-            hw_config.power_pin_pulse_ms = 40,
+       
+            hw_config.power_pin_pulse_ms = 40;
+            hw_config.reset_pin_pulse_ms = 40;
             hw_config.port_cnt = 4;
-            hw_config.power_pin_polarity = 1;
-            //hw_config.hotplug = 1;
-            hw_config.power_pin_od = 1;//Back to OD confguration -simpler hardware build (HW2 internal) without n-mosfets
-            hw_config.reset_pin_od = 1;//
-            hw_config.reset_pin_polarity = 0; 
+            hw_config.hotplug = 1; //
+            #ifdef CONFIG_BLUERETRO_SYSTEM_OGX360_HW2_PUSH_PULL           
+            hw_config.power_pin_od = 0;		   // settings for HW design with  N-MOSFETs
+            hw_config.reset_pin_od = 0;		   // pins as output PUSH-PULL, so no need for external pull-up resistors,
+            hw_config.reset_pin_polarity = 1;  // and better compatibility with various ESP32 power supply
+            hw_config.power_pin_polarity = 0;  // works safe for esp32 in both intern/extern pwr supply scenarios 
+            #else
+            hw_config.power_pin_polarity = 1;  //OD HW design
+            hw_config.power_pin_od = 1;		   //littlebit less complicated internal  hardware build (HW2 internal)
+            hw_config.reset_pin_od = 1;		   //integration with xbox front panel buttons at minimum level
+            hw_config.reset_pin_polarity = 0; //requires only 2 diodes
+            #endif
             break;
         case DC:
         case GC:
@@ -744,28 +757,37 @@ void sys_mgr_init(uint32_t package) {
     }
 
 #ifdef CONFIG_BLUERETRO_HW2
-	#ifdef CONFIG_BLUERETRO_SYSTEM_OGX360
-	gpio_set_level(POWER_ON_PIN, 1);
-	#endif
+#if defined(CONFIG_BLUERETRO_SYSTEM_OGX360) && !defined(CONFIG_BLUERETRO_SYSTEM_OGX360_HW2_PUSH_PULL)
+    gpio_set_level(POWER_ON_PIN, 1);
+#endif
+   
     if (hw_config.power_pin_od) {
         io_conf.mode = GPIO_MODE_OUTPUT_OD;
     }
     else {
         io_conf.mode = GPIO_MODE_OUTPUT;
     }
-    set_power_on(0);
-    io_conf.pin_bit_mask = 1ULL << POWER_ON_PIN;
-    gpio_config(&io_conf);
+#if !defined(CONFIG_BLUERETRO_SYSTEM_OGX360) || defined(CONFIG_BLUERETRO_SYSTEM_OGX360_HW2_PUSH_PULL)
+    // Wywołujemy tylko dla systemów innych niż nowy OGX360
+    set_power_on(0); 
+#endif
 
+    io_conf.pin_bit_mask = 1ULL << POWER_ON_PIN;
+    gpio_config(&io_conf);   
     set_power_off(0);
     io_conf.pin_bit_mask = 1ULL << power_off_pin;
     gpio_config(&io_conf);
-    
-    gpio_set_level(RESET_PIN, 1);   
+
+#ifdef CONFIG_BLUERETRO_SYSTEM_OGX360_HW2_PUSH_PULL
+    gpio_set_level(RESET_PIN, 0);
+    #else
+    gpio_set_level(RESET_PIN, 1);
+    #endif
+
+
     if (hw_config.reset_pin_od) {
         io_conf.mode = GPIO_MODE_OUTPUT_OD;
-    }
-    else {
+    } else {
         io_conf.mode = GPIO_MODE_OUTPUT;
     }
     io_conf.pin_bit_mask = 1ULL << RESET_PIN;
