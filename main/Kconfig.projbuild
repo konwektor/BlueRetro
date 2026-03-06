@@ -135,6 +135,18 @@ menu "BlueRetro"
 
     endchoice
 
+    menu "OGX360 Hardware Configuration"
+        depends on BLUERETRO_SYSTEM_OGX360
+
+        config BLUERETRO_SYSTEM_OGX360_HW2_PUSH_PULL
+            bool "Use PUSH-PULL OGX360 Hardware design(N-MOSFETs)"
+            default n
+            help
+                Enable this ONLY if you are using hardware revision with N-MOSFETs.
+                Will init  GPIO pins PWR_ON_PIN 13 and RESET_PIN 14 as output PUSH-PULL mode. 
+                By default, Open-Drain logic is used with pins set to 1.
+    endmenu
+
     menu "Debug"
 
         config BLUERETRO_QEMU
