@@ -114,13 +114,14 @@ Needed only for extended functionality:
 
 ## I²C Bus Connections  
 
-⚠️**Critical note:** In the firmware, ESP32 I²C pins are **swapped** compared to default labeling!
+~~⚠️**Critical note:** In the firmware, ESP32 I²C pins are **swapped** compared to default labeling!~~  
+The I2C pin assignment in the code now matches the hardware diagrams.
 
-- SDA = **GPIO22**  
-- SCL = **GPIO21**
-- GPIO21 → Level Shifter **LV2**  
-- GPIO22 → Level Shifter **LV1**
-TODO - in next release apply fix in code 
+- SDA = **GPIO21**  
+- SCL = **GPIO22**
+- GPIO21 → Level Shifter **LV1**  
+- GPIO22 → Level Shifter **LV2**
+
 
 Connections:
 
@@ -129,8 +130,8 @@ Connections:
 - **D3 (SCL, pin 7)** from all Arduinos → Level Shifter **HV2**  
 - **ESP32 3V3** → Level Shifter **LV**  
 - **ESP32 GND / ARDUINO GND** → Level Shifter **GND** (connect both HV and LV GND)  
-- **ESP32 GPIO22 (SDA)** → Level Shifter **LV1**  
-- **ESP32 GPIO21 (SCL)** → Level Shifter **LV2**
+- **ESP32 GPIO21 (SDA)** → Level Shifter **LV1**  
+- **ESP32 GPIO22 (SCL)** → Level Shifter **LV2**
 
 <p align="center">
   <a href="../HW1/BROGX_HW1_pictures.pdf">

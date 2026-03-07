@@ -57,12 +57,14 @@ You can connect the ESP32 to one or up to four Arduino boards. Each Arduino Pro 
 - Connect GPIO21 (SDA) on the ESP32 to the level shifter (LV1).
 - Connect GPIO22 (SCL) on the ESP32 to the level shifter (LV2).
 
-### Important Pin Configuration:
-**TODO: FIX IN CODE**
-- **In the code**, ESP32 SDA is set to **22** and SCL to **21**, opposite as in diagrams **!!!**
-Change
-- Connect GPIO21 on the ESP32 to the level shifter (LV2)  
-- Connect GPIO22 on the ESP32 to the level shifter (LV1).
+### Important Pin Configuration: UPDATED
+The I2C pin assignment in the code now matches the hardware diagrams.  
+~~TODO: FIX IN CODE~~  
+~~- In the code, ESP32 SDA is set to 22 and SCL to 21, opposite as in diagrams !!!~~  
+~~Change~~  
+~~- Connect GPIO21 on the ESP32 to the level shifter (LV2)~~  
+~~- Connect GPIO22 on the ESP32 to the level shifter (LV1).~~  
+
 
  
     
