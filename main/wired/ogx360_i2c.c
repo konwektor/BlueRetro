@@ -27,8 +27,10 @@
 
 
 #define OGX360_I2C_PORT_MAX 4
-#define sda_pin 22
-#define scl_pin 21
+// FIXED: Swapped pins to match standard ESP32 I2C hardware layout
+// Previous config (SDA:22, SCL:21) was incorrect.
+#define sda_pin 21
+#define scl_pin 22
 #define I2C_NUM I2C_NUM_0
 //#define APB_CLK_HZ (80 * 1000 * 1000) 
 
@@ -294,8 +296,8 @@ void ogx360_initialize_i2c(void) {
         ets_printf("OGX360_INITIALIZE_I2C - setting I2C config\n");
         i2c_config_t conf = {0}; // always do 0 cfg
         conf.mode = I2C_MODE_MASTER;
-        conf.sda_io_num = 22;
-        conf.scl_io_num = 21;
+        conf.sda_io_num = sda_pin;
+        conf.scl_io_num = scl_pin;
         conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
         conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
         conf.master.clk_speed = 400000;
@@ -332,9 +334,7 @@ void ogx360_pingSlaves() {
             esp_err_t result = i2c_master_write_to_device(I2C_NUM_0, i + 1, ping, sizeof(ping), 10);
             playerConnected[i] = (result == ESP_OK);
             ets_printf("OGX360_pingSlaves: Port %d ping %s\n", i, (result == ESP_OK) ? "successful" : "\x1b[31mfailed\x1b[0m");
-            if (result != ESP_OK) {
-                portActive[i] = false;
-            }
+            
         } else {
             // Port is inactive but player still connected - 
             //disconnectPacket[] = { 0xF0 }; arduinos USB D+,D- pins going to high-Z state/not visible anymore by USB host
@@ -634,9 +634,7 @@ void ogx360_i2c_port_cfg(uint16_t mask) {
                         ets_printf("OGX360_I2C_PORT_CFG: Pinging Arduino on port %d OK\n", i);
                         playerConnected[i] = true;                        
                     } else {
-                        ets_printf("OGX360_I2C_PORT_CFG: \x1b[31mPinging Arduino failed! Error: %d\x1b[0m\n", result);
-                        ets_printf("OGX360_I2C_PORT_CFG: Setting port %d as false\n", i);
-                        portActive[i] = false;
+                        ets_printf("OGX360_I2C_PORT_CFG: \x1b[31mPinging Arduino failed! Error: %d\x1b[0m\n", result);                        
                     }
                 } else {  
                     ets_printf("OGX360_I2C_PORT_CFG: Port %d DEACTIVATED, sending disconnect\n", i);
