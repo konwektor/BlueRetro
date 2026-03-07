@@ -37,14 +37,14 @@ The Arduino communicates with the Xbox over USB. A modification to the OGX360 so
 
 [User manual](Instructions/README.md) — Information about the adapter, programming, and hardware build details.
 
-# Update to Blueretro 25.04
+# Update to Blueretro v25.10-beta
 
 
 
 
-quick info:
+**Quick info:**
 
-Based on BlueRetro v25.04
+master is based on BlueRetro v25.10-beta (includes subsequent changes up to the latest commit; exact tracking is limited due to non-linear history).
 
     Tweak hw2 internal support
     Tweak behavie of port detection in hw2 
@@ -70,7 +70,8 @@ This version need also updating arduino firmware in case of use hw2, use mine fo
 If You already got software for BlueRetro support in arduino, and staying by hw1 - no update is needed.
 
 This can be compiled the same as BlueRetro. <br>
-Copy /configs/hw1/ogx360 to Your /Blueretro/sdkconfig start esp-idf (v5.1.2) and rund "esp.py build".
+Copy /configs/hw1/ogx360 or /configs/hw2/ogx360 to Your /Blueretro/sdkconfig  
+Update [esp-idf to 5.5.0 2024-12-02](https://github.com/espressif/esp-idf/tree/030c9957dbc5c5a627cf1bb4b2b856f1b6c1343c), and rund "esp.py build".
 
 Or just go to [Releases](https://github.com/konwektor/BlueRetro/releases), and download already compiled files.
 <BR>  
