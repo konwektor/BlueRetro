@@ -160,11 +160,11 @@ void ogx360_meta_init(struct wired_ctrl *ctrl_data) {
     for (uint32_t i = 0; i < WIRED_MAX_DEV; i++) {
         for (uint32_t j = 0; j < ADAPTER_MAX_AXES; j++) {
             switch (config.out_cfg[i].dev_mode) {
-                //case DEV_PAD_ALT:
-                    //ctrl_data[i].mask = ogx360_mask;
-                    //ctrl_data[i].desc = ogx360_desc;
-                    //ctrl_data[i].axes[j].meta = &ogx360_axes_meta[j];
-                   // break;
+                case DEV_PAD_ALT:
+                    ctrl_data[i].mask = ogx360_mask;
+                    ctrl_data[i].desc = ogx360_desc;
+                    ctrl_data[i].axes[j].meta = &ogx360_axes_meta[j];
+                    break;
                 default:
                     ctrl_data[i].mask = ogx360_mask;
                     ctrl_data[i].desc = ogx360_desc;
@@ -175,12 +175,12 @@ void ogx360_meta_init(struct wired_ctrl *ctrl_data) {
     }
 }
 
-void ogx360_ctrl_special_action(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
-    static uint32_t last_osd_btns = 0; // Przechowuje poprzedni stan przycisków
+void ogx360_ctrl_debug_action(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
+    static uint32_t last_osd_btns = 0; // Stores previous button state
     
-    // Sprawdź czy menu OSD jest aktywne
+    // Check if OSD menu is active
     if (atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE2)) {
-        // Obsługa przycisków w menu OSD
+        // Handle buttons in OSD menu
         uint32_t osd_btns = ctrl_data->btns[0].value & (BIT(PAD_LD_UP) | BIT(PAD_LD_DOWN) | 
         BIT(PAD_LD_LEFT) | BIT(PAD_LD_RIGHT) | BIT(PAD_RB_DOWN) | BIT(PAD_RB_UP) | BIT(PAD_RB_LEFT) 
         |BIT(PAD_RB_RIGHT) |BIT(PAD_MM) |BIT(PAD_MS));
@@ -194,30 +194,30 @@ void ogx360_ctrl_special_action(struct wired_ctrl *ctrl_data, struct wired_data 
             if (!atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE)) {
                 atomic_set_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
 
-                // Pobierz aktualną strukturę wyjściową
+                // Get current output structure
                 struct usbd_duke_out duke_out;
                 memcpy((void *)&duke_out, wired_data->output, sizeof(duke_out));
                 
-                // ZACHOWAJ pola stałe
+                // PRESERVE constant fields
                 uint8_t controllerType = duke_out.controllerType;
                 uint8_t startByte = duke_out.startByte;
                 uint8_t bLength = duke_out.bLength;
                 
-                // Wyczyść TYLKO przyciski, ZACHOWAJ osie!
+                // Clear ONLY buttons, PRESERVE axes!
                 duke_out.wButtons = 0;
                 for (int i = 0; i < NUM_ANALOG_BUTTONS; i++) {
                     duke_out.analogButtons[i] = 0;
                 }
                 
-                // PRZYWRÓĆ pola stałe
+                // RESTORE constant fields
                 duke_out.controllerType = controllerType;
                 duke_out.startByte = startByte;  
                 duke_out.bLength = bLength;
 
-                // DEBUG: Wypisz stan przed modyfikacją
+                // DEBUG: Print state before modification
                 ets_printf("Before - wButtons: 0x%04X\n", duke_out.wButtons);
                 
-                // Obsłuż nowo wciśnięte przyciski
+                // Handle newly pressed buttons
                 if (new_press & BIT(PAD_LD_LEFT)) {
                     ets_printf("ctrl_special_action:D_LEFT (NEW PRESS)\n");
                     ogx360_i2c_ping1(wired_data->index);
@@ -282,37 +282,37 @@ void ogx360_ctrl_special_action(struct wired_ctrl *ctrl_data, struct wired_data 
                 }
                 else if (new_press & BIT(PAD_MS)) {
                      ets_printf("OSD: BACK pressed - exiting OSD (NEW PRESS)\n");
-                    // Back - wyjdź z menu OSD
+                    // Back - exit OSD menu
                     atomic_clear_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE2);
                     atomic_clear_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
                     start_rumble_sequence(wired_data->index, 200000, 1);
-                    // Przywróć normalny stan struktury
+                    // Restore normal structure state
                     memcpy(wired_data->output, (void *)&duke_out, sizeof(duke_out));
-                    last_osd_btns = 0; // Zresetuj stan przycisków
-                    return; // Wyjdź natychmiast
+                    last_osd_btns = 0; // Reset button state
+                    return; // Exit immediately
                 }
 
-                // DEBUG: Wypisz stan po modyfikacji
+                // DEBUG: Print state after modification
                 ets_printf("After - wButtons: 0x%04X\n", duke_out.wButtons);
                 
-                // Zapisz zmodyfikowaną strukturę
+                // Save modified structure
                 memcpy(wired_data->output, (void *)&duke_out, sizeof(duke_out));
                    
-                // Wymuś wysłanie danych
+                // Force data sending
                // ogx360_ll_process(wired_data->index);
             }
         }
         
-        // Aktualizuj poprzedni stan przycisków
+        // Update previous button state
         last_osd_btns = osd_btns;
         
-        // Jeśli żaden przycisk nie jest wciśnięty, wyczyść flagę
+        // If no button is pressed, clear flag
         if (!osd_btns) {
             atomic_clear_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
         }
     }
     else {
-        // Normalna obsługa przycisku Home (MT)
+        // Normal handling of Home button (MT)
         if (ctrl_data->map_mask[0] & generic_btns_mask[PAD_MT]) {
             if (ctrl_data->btns[0].value & generic_btns_mask[PAD_MT]) {
                 if (!atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE)) {
@@ -323,9 +323,9 @@ void ogx360_ctrl_special_action(struct wired_ctrl *ctrl_data, struct wired_data 
             else {
                 if (atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE)) {
                     atomic_clear_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
-                    // Aktywuj menu OSD
+                    // Activate OSD menu
                     atomic_set_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE2);
-                    last_osd_btns = 0; // Zresetuj stan przycisków przy wejściu do OSD
+                    last_osd_btns = 0; // Reset button state when entering OSD
                     ets_printf("Home released - OSD activated\n");
                     start_rumble_sequence(wired_data->index, 200000, 1);
                 }
@@ -334,7 +334,7 @@ void ogx360_ctrl_special_action(struct wired_ctrl *ctrl_data, struct wired_data 
     }
 }
 
-/*
+
 void ogx360_ctrl_special_action(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
 
     if (ctrl_data->map_mask[0] & generic_btns_mask[PAD_MT]) {
@@ -359,37 +359,38 @@ void ogx360_ctrl_special_action(struct wired_ctrl *ctrl_data, struct wired_data 
         }
     }
 }
-*/
 
-void ogx360_ctrl_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {    
-      // Ensure wired_data and wired_data->output are not NULL
-    if (wired_data == NULL) {
+void ogx360_ctrl_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *wired_data)
+{
+    // Ensure wired_data and wired_data->output are not NULL
+    if (wired_data == NULL)
+    {
 
-        //ets_printf("OGX360_CTRL_FROM_GENERIC : Error, NULL pointer!!!\n");
+        // ets_printf("OGX360_CTRL_FROM_GENERIC : Error, NULL pointer!!!\n");
         return;
     }
     struct usbd_duke_out duke_out;
-    
+
     memcpy((void *)&duke_out, wired_data->output, sizeof(duke_out));
-    
-    //Start output
+
+    // Start output
     duke_out.controllerType = 0xF1;
     duke_out.startByte = 0;
-    duke_out.bLength = ( sizeof(struct usbd_duke_out) + 3 ) / 4; //Number of 4-byte blocks sent to Xbox //0x14;
-    
-    duke_out.wButtons = 0;  // Digital buttons
-    for (int i=0;i<BUTTON_MASK_SIZE;i++)
+    duke_out.bLength = (sizeof(struct usbd_duke_out) + 3) / 4; // Number of 4-byte blocks sent to Xbox //0x14;
+
+    duke_out.wButtons = 0; // Digital buttons
+    for (int i = 0; i < BUTTON_MASK_SIZE; i++)
     {
         if (ogx360_digital_btns_mask[i] != -1)
         {
             if ((ctrl_data->btns[0].value & BIT(i)) != 0)
             {
                 duke_out.wButtons |= BIT(ogx360_digital_btns_mask[i]);
-            }   
+            }
         }
     }
-    
-    for (int i=0;i<BUTTON_MASK_SIZE;i++) // Analog buttons
+
+    for (int i = 0; i < BUTTON_MASK_SIZE; i++) // Analog buttons
     {
         if (ogx360_analog_btns_mask[i] != -1)
         {
@@ -404,43 +405,53 @@ void ogx360_ctrl_from_generic(struct wired_ctrl *ctrl_data, struct wired_data *w
             }
         }
     }
-   
-  
-    
-    
-    for (int i=0;i<NUM_16BIT_AXIS;i++) // 16 bit axis
+    if (config.out_cfg[ctrl_data->index].dev_mode == DEV_PAD_ALT)
     {
-        if (ctrl_data->axes[i].value > ctrl_data->axes[i].meta->size_max) {
+        ogx360_ctrl_debug_action(ctrl_data, wired_data);
+    }
+    else
+    {
+        ogx360_ctrl_special_action(ctrl_data, wired_data);
+    }
+
+    for (int i = 0; i < NUM_16BIT_AXIS; i++) // 16 bit axis
+    {
+        if (ctrl_data->axes[i].value > ctrl_data->axes[i].meta->size_max)
+        {
             duke_out.axis16[i] = ctrl_data->axes[i].meta->size_max;
         }
-        else if (ctrl_data->axes[i].value < ctrl_data->axes[i].meta->size_min) {
+        else if (ctrl_data->axes[i].value < ctrl_data->axes[i].meta->size_min)
+        {
             duke_out.axis16[i] = ctrl_data->axes[i].meta->size_min;
         }
-        else {
+        else
+        {
             duke_out.axis16[i] = ctrl_data->axes[i].value;
         }
     }
-    
-    for (int i=0;i<NUM_8BIT_AXIS;i++) // 8 bit axis
+
+    for (int i = 0; i < NUM_8BIT_AXIS; i++) // 8 bit axis
     {
         uint8_t axes_index = NUM_16BIT_AXIS + i;
-        if (ctrl_data->axes[axes_index].value > ctrl_data->axes[axes_index].meta->size_max) {
+        if (ctrl_data->axes[axes_index].value > ctrl_data->axes[axes_index].meta->size_max)
+        {
             duke_out.axis8[i] = ctrl_data->axes[axes_index].meta->size_max;
         }
-        else if (ctrl_data->axes[axes_index].value < ctrl_data->axes[axes_index].meta->size_min) {
+        else if (ctrl_data->axes[axes_index].value < ctrl_data->axes[axes_index].meta->size_min)
+        {
             duke_out.axis8[i] = ctrl_data->axes[axes_index].meta->size_min;
         }
-        else {     
+        else
+        {
             duke_out.axis8[i] = ctrl_data->axes[axes_index].value;
         }
     }
-     memcpy(wired_data->output, (void *)&duke_out, sizeof(duke_out));
-     ogx360_ctrl_special_action(ctrl_data, wired_data);
-     
-    if (!atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE2)) {
+    memcpy(wired_data->output, (void *)&duke_out, sizeof(duke_out));
+
+    if (!atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE2))
+    {
         ogx360_process(wired_data->index);
     }
-    
 }
 
 void ogx360_from_generic(int32_t dev_mode, struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
