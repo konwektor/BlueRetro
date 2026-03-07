@@ -590,24 +590,17 @@ void ogx360_i2c_init(uint32_t package) {
         i2c_ll_master_fsm_rst(hw);  // Reset FSM
         hw->int_clr.ack_err = 1;    // Clear error flag
     }
-  */  
-     
-     
+  */
 
-
-	//ets_printf("ogx360_i2c_init:  Starting dummy  \n");
-    if (!initialized) {
-        //ets_printf("ogx360_i2c_init: not initialized - settings ports to zero  \n");
-        //initialized = false;
-        ogx360_i2c_port_cfg(0xF);
-        ets_printf("ogx360_i2c_init: ports init zero done \n");
-       
-       
-    } else {
-        ogx360_i2c_port_cfg(0x0);
-    ets_printf("ogx360_i2c_init: already initialized dont reset ports \n");
-    
-   }
+    if (!initialized)
+    {
+        ogx360_i2c_port_cfg(0xF); // all ports active at start
+        ets_printf("ogx360_i2c_init: ports init done \n");
+    }
+    else
+    {
+        ets_printf("ogx360_i2c_init: already initialized dont reset ports \n");
+    }
 }
 
 
