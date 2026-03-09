@@ -1,18 +1,11 @@
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include <string.h>
-#include <esp_timer.h>
-#include "bluetooth/host.h"
-#include "adapter/wireless/wireless.h"
 #include "wired/ogx360_i2c.h" 
-#include <esp32/rom/ets_sys.h>
 #include "zephyr/types.h"
 #include "tools/util.h"
-#include "adapter/adapter.h"
 #include "adapter/config.h"
-#include "adapter/kb_monitor.h"
 #include "adapter/wired/wired.h"
-#include "adapter/wireless/wireless.h"
+#include "tests/cmds.h"
+#include "bluetooth/mon.h"
 #include "ogx360.h"
 
 
@@ -101,187 +94,196 @@ static DRAM_ATTR const int ogx360_analog_btns_mask[BUTTON_MASK_SIZE] = {
     -1, OGX360_WHITE, -1, -1,
 };
 
+void IRAM_ATTR ogx360_init_buffer(int32_t dev_mode,
+                                  struct wired_data *wired_data) {
+  switch (dev_mode) {
+  default: {
+    struct usbd_duke_out *duke_out = (struct usbd_duke_out *)wired_data->output;
+    struct usbd_duke_out *duke_out_mask = (struct usbd_duke_out *)wired_data->output_mask;
 
-
-void IRAM_ATTR ogx360_init_buffer(int32_t dev_mode, struct wired_data *wired_data) {
-     switch (dev_mode) {
-        default:
-        {
-            struct usbd_duke_out *duke_out = (struct usbd_duke_out *)wired_data->output;
-            struct usbd_duke_out *duke_out_mask = (struct usbd_duke_out *)wired_data->output_mask;
-
-            memset((void *)duke_out, 0, sizeof(*duke_out));
-            duke_out->controllerType = 0xF1;
-            duke_out->startByte = 0x00;
-            duke_out->bLength = 0x14;
-            duke_out->wButtons = 0xFFFF;  // All digital buttons unpressed
-            // Initialize analog buttons
-            for (uint32_t i = 0; i < NUM_ANALOG_BUTTONS; i++) {
-                duke_out->analogButtons[i] = 0x00;  // Default unpressed value
-            }
-            //Initialize 8-bit axes to their neutral positions
-            for (uint32_t i = 0; i < NUM_8BIT_AXIS; i++) {
-                duke_out->axis8[i] = ogx360_axes_meta[NUM_16BIT_AXIS + i].neutral; // Set 8-bit axes to neutral
-            }
-            // Initialize 16-bit axes to their neutral positions
-            for (uint32_t i = 0; i < NUM_16BIT_AXIS; i++) {
-                duke_out->axis16[ogx360_axes_idx[i]] = ogx360_axes_meta[i].neutral; // Set 16-bit axes to neutral
-            }
-
-            
-            // Initialize mask structure
-            duke_out_mask->controllerType = 0x00;
-            duke_out_mask->startByte = 0x00;
-            duke_out_mask->bLength = 0x00;
-            duke_out_mask->wButtons = 0x0000;  // No buttons masked
-            // Initialize analog buttons mask
-            for (uint32_t i = 0; i < NUM_ANALOG_BUTTONS; i++) {
-                duke_out_mask->analogButtons[i] = 0x00;  // Default unpressed value
-            }
-            // Initialize 8-bit axes mask
-            for (uint32_t i = 0; i < NUM_8BIT_AXIS; i++) {
-                duke_out_mask->axis8[i] = 0x00;  // No mask
-            }
-            // Initialize 16-bit axes mask
-            for (uint32_t i = 0; i < NUM_16BIT_AXIS; i++) {
-                duke_out_mask->axis16[i] = 0x0000;  // No mask
-            }
-            atomic_clear_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
-            atomic_clear_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE2);
-            memset(wired_data->output_mask, 0x00, sizeof(struct usbd_duke_out));
-            break;
-        }
+    memset((void *)duke_out, 0, sizeof(*duke_out));
+    duke_out->controllerType = 0xF1;
+    duke_out->startByte = 0x00;
+    duke_out->bLength = 0x14;
+    duke_out->wButtons = 0xFFFF; // All digital buttons unpressed
+    // Initialize analog buttons
+    for (uint32_t i = 0; i < NUM_ANALOG_BUTTONS; i++) {
+      duke_out->analogButtons[i] = 0x00; // Default unpressed value
     }
+    // Initialize 8-bit axes to their neutral positions
+    for (uint32_t i = 0; i < NUM_8BIT_AXIS; i++) {
+      duke_out->axis8[i] = ogx360_axes_meta[NUM_16BIT_AXIS + i]
+                               .neutral; // Set 8-bit axes to neutral
+    }
+    // Initialize 16-bit axes to their neutral positions
+    for (uint32_t i = 0; i < NUM_16BIT_AXIS; i++) {
+      duke_out->axis16[ogx360_axes_idx[i]] =
+          ogx360_axes_meta[i].neutral; // Set 16-bit axes to neutral
+    }
+
+    // Initialize mask structure
+    duke_out_mask->controllerType = 0x00;
+    duke_out_mask->startByte = 0x00;
+    duke_out_mask->bLength = 0x00;
+    duke_out_mask->wButtons = 0x0000; // No buttons masked
+    // Initialize analog buttons mask
+    for (uint32_t i = 0; i < NUM_ANALOG_BUTTONS; i++) {
+      duke_out_mask->analogButtons[i] = 0x00; // Default unpressed value
+    }
+    // Initialize 8-bit axes mask
+    for (uint32_t i = 0; i < NUM_8BIT_AXIS; i++) {
+      duke_out_mask->axis8[i] = 0x00; // No mask
+    }
+    // Initialize 16-bit axes mask
+    for (uint32_t i = 0; i < NUM_16BIT_AXIS; i++) {
+      duke_out_mask->axis16[i] = 0x0000; // No mask
+    }
+    atomic_clear_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
+    atomic_clear_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE2);
+    memset(wired_data->output_mask, 0x00, sizeof(struct usbd_duke_out));
+    break;
+  }
+  }
 }
 
 void ogx360_meta_init(struct wired_ctrl *ctrl_data) {
-    memset((void *)ctrl_data, 0, sizeof(*ctrl_data)*4);
+  memset((void *)ctrl_data, 0, sizeof(*ctrl_data) * 4);
 
-    for (uint32_t i = 0; i < WIRED_MAX_DEV; i++) {
-        for (uint32_t j = 0; j < ADAPTER_MAX_AXES; j++) {
-            switch (config.out_cfg[i].dev_mode) {
-                case DEV_PAD_ALT:
-                    ctrl_data[i].mask = ogx360_mask;
-                    ctrl_data[i].desc = ogx360_desc;
-                    ctrl_data[i].axes[j].meta = &ogx360_axes_meta[j];
-                    break;
-                default:
-                    ctrl_data[i].mask = ogx360_mask;
-                    ctrl_data[i].desc = ogx360_desc;
-                    ctrl_data[i].axes[j].meta = &ogx360_axes_meta[j];
-                    break;
-            }
-        }
+  for (uint32_t i = 0; i < WIRED_MAX_DEV; i++) {
+    for (uint32_t j = 0; j < ADAPTER_MAX_AXES; j++) {
+      switch (config.out_cfg[i].dev_mode) {
+      case DEV_PAD_ALT:
+        ctrl_data[i].mask = ogx360_mask;
+        ctrl_data[i].desc = ogx360_desc;
+        ctrl_data[i].axes[j].meta = &ogx360_axes_meta[j];
+        break;
+      default:
+        ctrl_data[i].mask = ogx360_mask;
+        ctrl_data[i].desc = ogx360_desc;
+        ctrl_data[i].axes[j].meta = &ogx360_axes_meta[j];
+        break;
+      }
     }
+  }
 }
 
-void ogx360_ctrl_debug_action(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
+void ogx360_ctrl_debug_action(struct wired_ctrl *ctrl_data, struct wired_data *wired_data)
+{
     static uint32_t last_osd_btns = 0; // Stores previous button state
-    
-    // Check if OSD menu is active
-    if (atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE2)) {
-        // Handle buttons in OSD menu
-        uint32_t osd_btns = ctrl_data->btns[0].value & (BIT(PAD_LD_UP) | BIT(PAD_LD_DOWN) | 
-        BIT(PAD_LD_LEFT) | BIT(PAD_LD_RIGHT) | BIT(PAD_RB_DOWN) | BIT(PAD_RB_UP) | BIT(PAD_RB_LEFT) 
-        |BIT(PAD_RB_RIGHT) |BIT(PAD_MM) |BIT(PAD_MS));
 
-        //ets_printf("OSD Active - buttons: 0x%08X, last: 0x%08X\n", osd_btns, last_osd_btns);
-        
+    // Check if OSD menu is active
+    if (atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE2))
+    {
+        // Handle buttons in OSD menu
+        uint32_t osd_btns = ctrl_data->btns[0].value & (BIT(PAD_LD_UP) | BIT(PAD_LD_DOWN) |
+                                                        BIT(PAD_LD_LEFT) | BIT(PAD_LD_RIGHT) | BIT(PAD_RB_DOWN) | BIT(PAD_RB_UP) | BIT(PAD_RB_LEFT) | BIT(PAD_RB_RIGHT) | BIT(PAD_MM) | BIT(PAD_MS));
+
+        // ets_printf("OSD Active - buttons: 0x%08X, last: 0x%08X\n", osd_btns, last_osd_btns);
+
         // button press check
         uint32_t new_press = osd_btns & ~last_osd_btns;
-        
-        if (new_press) {
-            if (!atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE)) {
+
+        if (new_press)
+        {
+            if (!atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE))
+            {
                 atomic_set_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
 
                 // Get current output structure
                 struct usbd_duke_out duke_out;
                 memcpy((void *)&duke_out, wired_data->output, sizeof(duke_out));
-                
+
                 // PRESERVE constant fields
                 uint8_t controllerType = duke_out.controllerType;
                 uint8_t startByte = duke_out.startByte;
                 uint8_t bLength = duke_out.bLength;
-                
+
                 // Clear ONLY buttons, PRESERVE axes!
                 duke_out.wButtons = 0;
-                for (int i = 0; i < NUM_ANALOG_BUTTONS; i++) {
+                for (int i = 0; i < NUM_ANALOG_BUTTONS; i++)
+                {
                     duke_out.analogButtons[i] = 0;
                 }
-                
+
                 // RESTORE constant fields
                 duke_out.controllerType = controllerType;
-                duke_out.startByte = startByte;  
+                duke_out.startByte = startByte;
                 duke_out.bLength = bLength;
 
                 // DEBUG: Print state before modification
-                ets_printf("Before - wButtons: 0x%04X\n", duke_out.wButtons);
-                
+                printf("Before - wButtons: 0x%04X\n", duke_out.wButtons);
+
                 // Handle newly pressed buttons
-                if (new_press & BIT(PAD_LD_LEFT)) {
-                    ets_printf("ctrl_special_action:D_LEFT (NEW PRESS)\n");
-                    ogx360_i2c_ping1(wired_data->index);
-                  //duke_out.wButtons |= BIT(ogx360_digital_btns_mask[OGX360_D_LEFT]);
-
+                if (new_press & BIT(PAD_LD_LEFT))
+                {
+                    //ets_printf("ctrl_special_action:D_LEFT (NEW PRESS)\n");
+                    // duke_out.wButtons |= BIT(ogx360_digital_btns_mask[OGX360_D_LEFT]);
                 }
-                else if (new_press & BIT(PAD_LD_RIGHT)) {  
-                    ets_printf("ctrl_special_action:D_RIGHT (NEW PRESS)\n");
-                    ogx360_i2c_disconnectPacket1(wired_data->index);
-                //  duke_out.wButtons |= BIT(ogx360_digital_btns_mask[OGX360_D_RIGHT]);
-
+                else if (new_press & BIT(PAD_LD_RIGHT))
+                {
+                    //ets_printf("ctrl_special_action:D_RIGHT (NEW PRESS)\n");
+                    //  duke_out.wButtons |= BIT(ogx360_digital_btns_mask[OGX360_D_RIGHT]);
                 }
-                else if (new_press & BIT(PAD_LD_DOWN)) {  
-                    ets_printf("ctrl_special_action:D_DOWN (NEW PRESS)\n");
-                    ogx360_i2c_disconnect_ll();
-                  // duke_out.wButtons |= 0x0002;
+                else if (new_press & BIT(PAD_LD_DOWN))
+                {
+                   // ets_printf("ctrl_special_action:D_DOWN (NEW PRESS)\n");
+                    // duke_out.wButtons |= 0x0002;
                 }
 
-                else if (new_press & BIT(PAD_LD_UP)) {  
-                    ets_printf("ctrl_special_action:D_UP (NEW PRESS)\n"); 
-                     ogx360_i2c_ping_ll();
-                   //uke_out.wButtons |= BIT(ogx360_digital_btns_mask[OGX360_D_UP]);
+                else if (new_press & BIT(PAD_LD_UP))
+                {
+                   // ets_printf("ctrl_special_action:D_UP (NEW PRESS)\n");
+                    // duke_out.wButtons |= BIT(ogx360_digital_btns_mask[OGX360_D_UP]);
                 }
-                
-                else if (new_press & BIT(PAD_RB_LEFT)) {
+
+                else if (new_press & BIT(PAD_RB_LEFT))
+                {
                     int analog_index = ogx360_analog_btns_mask[PAD_RB_LEFT];
-                    if (analog_index != -1) {
+                    if (analog_index != -1)
+                    {
                         duke_out.analogButtons[analog_index] = 0xFF;
-                        ets_printf("ctrl_special_action:PAD_RB_LEFT/X (NEW PRESS)\n");
-                        ogx360_ll_process(wired_data->index);              
-                    }
-                }
-                else if (new_press & BIT(PAD_RB_RIGHT)) {
-                    int analog_index = ogx360_analog_btns_mask[PAD_RB_RIGHT];
-                    if (analog_index != -1) {
-                        duke_out.analogButtons[analog_index] = 0xFF;
-                        ets_printf("ctrl_special_action:PAD_RB_RIGHT/B (NEW PRESS)\n");
-                        ogx360_ll_process(wired_data->index);       
-                    }
-                }
-                else if (new_press & BIT(PAD_RB_DOWN)) {
-                    int analog_index = ogx360_analog_btns_mask[PAD_RB_DOWN];
-                    if (analog_index != -1) {
-                        duke_out.analogButtons[analog_index] = 0xFF;
-                        ets_printf("ctrl_special_action:PAD_RB_DOWN/A (NEW PRESS)\n");
-                        ogx360_initialize_i2c(); 
-
-                    }
-                }
-
-                else if (new_press & BIT(PAD_RB_UP)) {
-                    int analog_index = ogx360_analog_btns_mask[PAD_RB_UP];
-                    if (analog_index != -1) {
-                        duke_out.analogButtons[analog_index] = 0xFF;
-                        ets_printf("ctrl_special_action:PAD_RB_UP/Y (NEW PRESS)\n");
+                        //ets_printf("ctrl_special_action:PAD_RB_LEFT/X (NEW PRESS)\n");
                         ogx360_ll_process(wired_data->index);
                     }
                 }
-                else if (new_press & BIT(PAD_MM)) {
-                    ets_printf("OSD: START pressed - rumble (NEW PRESS)\n");
+                else if (new_press & BIT(PAD_RB_RIGHT))
+                {
+                    int analog_index = ogx360_analog_btns_mask[PAD_RB_RIGHT];
+                    if (analog_index != -1)
+                    {
+                        duke_out.analogButtons[analog_index] = 0xFF;
+                        //ets_printf("ctrl_special_action:PAD_RB_RIGHT/B (NEW PRESS)\n");
+                        ogx360_ll_process(wired_data->index);
+                    }
+                }
+                else if (new_press & BIT(PAD_RB_DOWN))
+                {
+                    int analog_index = ogx360_analog_btns_mask[PAD_RB_DOWN];
+                    if (analog_index != -1)
+                    {
+                        duke_out.analogButtons[analog_index] = 0xFF;
+                        //ets_printf("ctrl_special_action:PAD_RB_DOWN/A (NEW PRESS)\n");
+                    }
+                }
+
+                else if (new_press & BIT(PAD_RB_UP))
+                {
+                    int analog_index = ogx360_analog_btns_mask[PAD_RB_UP];
+                    if (analog_index != -1)
+                    {
+                        duke_out.analogButtons[analog_index] = 0xFF;
+                        //ets_printf("ctrl_special_action:PAD_RB_UP/Y (NEW PRESS)\n");
+                        ogx360_ll_process(wired_data->index);
+                    }
+                }
+                else if (new_press & BIT(PAD_MM))
+                {
+                    //ets_printf("OSD: START pressed - rumble (NEW PRESS)\n");
                     start_rumble_sequence(wired_data->index, 350000, 2);
                 }
-                else if (new_press & BIT(PAD_MS)) {
-                     ets_printf("OSD: BACK pressed - exiting OSD (NEW PRESS)\n");
+                else if (new_press & BIT(PAD_MS))
+                {
+                    //ets_printf("OSD: BACK pressed - exiting OSD (NEW PRESS)\n");
                     // Back - exit OSD menu
                     atomic_clear_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE2);
                     atomic_clear_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
@@ -289,44 +291,50 @@ void ogx360_ctrl_debug_action(struct wired_ctrl *ctrl_data, struct wired_data *w
                     // Restore normal structure state
                     memcpy(wired_data->output, (void *)&duke_out, sizeof(duke_out));
                     last_osd_btns = 0; // Reset button state
-                    return; // Exit immediately
+                    return;            // Exit immediately
                 }
 
                 // DEBUG: Print state after modification
-                ets_printf("After - wButtons: 0x%04X\n", duke_out.wButtons);
-                
+                //ets_printf("After - wButtons: 0x%04X\n", duke_out.wButtons);
+
                 // Save modified structure
                 memcpy(wired_data->output, (void *)&duke_out, sizeof(duke_out));
-                   
                 // Force data sending
-               // ogx360_ll_process(wired_data->index);
+                // ogx360_ll_process(wired_data->index);
             }
         }
-        
+
         // Update previous button state
         last_osd_btns = osd_btns;
-        
+
         // If no button is pressed, clear flag
-        if (!osd_btns) {
+        if (!osd_btns)
+        {
             atomic_clear_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
         }
     }
-    else {
+    else
+    {
         // Normal handling of Home button (MT)
-        if (ctrl_data->map_mask[0] & generic_btns_mask[PAD_MT]) {
-            if (ctrl_data->btns[0].value & generic_btns_mask[PAD_MT]) {
-                if (!atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE)) {
+        if (ctrl_data->map_mask[0] & generic_btns_mask[PAD_MT])
+        {
+            if (ctrl_data->btns[0].value & generic_btns_mask[PAD_MT])
+            {
+                if (!atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE))
+                {
                     atomic_set_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
-                    ets_printf("Home button pressed - waiting for release\n");
+                    //ets_printf("Home button pressed - waiting for release\n");
                 }
-            } 
-            else {
-                if (atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE)) {
+            }
+            else
+            {
+                if (atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE))
+                {
                     atomic_clear_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
                     // Activate OSD menu
                     atomic_set_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE2);
                     last_osd_btns = 0; // Reset button state when entering OSD
-                    ets_printf("Home released - OSD activated\n");
+                    //ets_printf("Home released - OSD activated\n");
                     start_rumble_sequence(wired_data->index, 200000, 1);
                 }
             }
@@ -334,23 +342,23 @@ void ogx360_ctrl_debug_action(struct wired_ctrl *ctrl_data, struct wired_data *w
     }
 }
 
-
 void ogx360_ctrl_special_action(struct wired_ctrl *ctrl_data, struct wired_data *wired_data) {
 
     if (ctrl_data->map_mask[0] & generic_btns_mask[PAD_MT]) {
    
 
         if (ctrl_data->btns[0].value & generic_btns_mask[PAD_MT]) {
-         //printf("MT button pressed\n"); // for Debug - to be sure if its working
+        
             if (!atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE)) {
                 atomic_set_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
+                 printf("MT button pressed\n"); // for Debug - to be sure if its working
                
             }
         } 
         else {
             if (atomic_test_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE)) {
                 atomic_clear_bit(&wired_data->flags, WIRED_WAITING_FOR_RELEASE);
-               // printf("MT button released\n"); // Debug
+                printf("MT button released\n"); // Debug
                 //short rumble - call rumble for n-times loops - port number count  
                 int repeat_count = wired_data->index + 1;  
                 start_rumble_sequence(ctrl_data->index, 350000, repeat_count);

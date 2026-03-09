@@ -670,13 +670,14 @@ void sys_mgr_init(uint32_t package) {
             hw_config.reset_pin_pulse_ms = 40;
             hw_config.port_cnt = 4;
             hw_config.hotplug = 1; //
+
             #ifdef CONFIG_BLUERETRO_SYSTEM_OGX360_HW2_PUSH_PULL           
             hw_config.power_pin_od = 0;		   // settings for HW design with  N-MOSFETs
             hw_config.reset_pin_od = 0;		   // pins as output PUSH-PULL, so no need for external pull-up resistors,
             hw_config.reset_pin_polarity = 1;  // and better compatibility with various ESP32 power supply
             hw_config.power_pin_polarity = 0;  // works safe for esp32 in both intern/extern pwr supply scenarios 
             #else
-            hw_config.power_pin_polarity = 1;  //OD HW design
+            hw_config.power_pin_polarity = 1;  //OD HW design // set_power_on(1) -> Level 0 (Ściąga przez diodę)
             hw_config.power_pin_od = 1;		   //littlebit less complicated internal  hardware build (HW2 internal)
             hw_config.reset_pin_od = 1;		   //integration with xbox front panel buttons at minimum level
             hw_config.reset_pin_polarity = 0; //requires only 2 diodes
