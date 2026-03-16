@@ -46,25 +46,18 @@ The Arduino communicates with the Xbox over USB. A modification to the OGX360 so
 
 master is based on BlueRetro v25.10-beta (includes subsequent changes up to the latest commit; exact tracking is limited due to non-linear history).
 
-    Tweak hw2 internal support
-    Tweak behavie of port detection in hw2 
-    hw2 power on/off using gamepad combo
-    hw2 DVD tray eject using gamepad combo
-    hw2 DVD tray button : 
-    push = tray eject
-    1sec < hold = BT pairing if no controller connected,or disconnect all connected already BT devices alreaady connected
-    3sec < hold = start BT pairing , 
-    6sec < hold = esp32 firmware reset 
-    
-    Added "virtual menu" with rumble feedback for simple debug i2c bus - 
-    push Xbox button and gamepad will rumble shortly,- enters in V-menu
-    Then Dpad-L/R/U/D do :  
-    ping(legacy driver) / disconnect(legacy driver)/ping (low level i2c driver) / disconnect(low level i2c driver)
-    Start is for double rumble,
-    A - initialize legacy i2c driver, B,X,Y - sending  1byte to output(xbox).
-    During staying inside V-menu only A,B,X,Y are sending bytes to adapter, all other buttons are invisible for console.
-    Back button - quit V-menu, and bring back support for all buttons. 
-    This function is  for checkin in i2c communication how arduinos modules react for connect/disconnect overflow and how xbox see it.  
+    - HW2 power on/off using gamepad combo
+    - HW2 DVD tray eject using gamepad combo  
+    - HW2 DVD tray button:    
+      Short push: Tray eject
+      1s < hold < 3s: Toggle Bluetooth inquiry start/stop (pairing mode)
+      3s < hold < 6s: Disconnect all connected Bluetooth gamepads
+      6s < hold: ESP32 firmware reset  
+    - Restore rumble feedback for active port as DEV_PAD default config
+      Push Xbox button: Gamepad will rumble shortly n-times (where n = port number)
+    - Move virtual menu to DEV_PAD_ALT config
+     
+   
     
 This version need also updating arduino firmware in case of use hw2, use mine fork at https://github.com/konwektor/ogx360.
 If You already got software for BlueRetro support in arduino, and staying by hw1 - no update is needed.
