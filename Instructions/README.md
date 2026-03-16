@@ -20,24 +20,28 @@ Power management (Xbox power ON/OFF) is an optional feature supported by HW2 int
 * [Powering ESP32]
 
 # 3 - Pairing Bluetooth Controller
-In the default configuration, BlueRetro is always in inquiry mode (IO17 LED pulsing) if no controller is connected. This applies to HW2 internal/external builds when the system is ON with no controller connected.
-
-- Pair controllers via inquiry first.
-- Inquiry behavior can be changed to manual in the web config. In manual mode:
-  - When the Xbox is ON with no Bluetooth controller connected, press the ESP32 BOOT button (HW1/HW2 external builds) or the Xbox DVD TRAY button (HW2 internal build) for 3 seconds to activate inquiry mode.
-
-A paired Bluetooth controller can turn the Xbox ON (HW2 internal with powered ESP32) or OFF (HW2 internal).
+In the default configuration, BlueRetro is always in inquiry mode (IO17 LED pulsing) if no controller is connected. This applies to HW2 internal/external builds when the system is ON with no controller connected.  
 
 [BlueRetro Controller List & Pairing Guide](https://github.com/darthcloud/BlueRetro/wiki/Controller-pairing-guide)
 
+- Pair controllers via inquiry first.
+
+Inquiry behavior can be changed to "Manual" in the [web config](https://konwektor.github.io/BlueRetroWebCfg/).  
+In manual mode:
+   * When the Xbox is ON and no Bluetooth controller is connected press and hold the ESP32 BOOT button (HW1/HW2 external builds), or the Xbox DVD TRAY button (HW2 internal build) for 1s < hold < 3s to activate/stop inquiry (pairing mode).
+
+A paired Bluetooth controller can turn the Xbox ON (HW2 internal with powered ESP32) or OFF (HW2 internal).
+
+
+
 # 4 - Web Config
-Power on the system and connect via Web Bluetooth at https://blueretro.io to configure the adapter.
+Power on the system and connect via Web Bluetooth at https://konwektor.github.io/BlueRetroWebCfg to configure the adapter.  
 **Config mode is only available if no controller is connected.** Ensure all controllers are disconnected from BROGX before accessing the Web configuration pages.
-Web pages work only partially for BROGX as the adapter is not officially supported by DarthCloud.
+At Web pages choose *OGX360* as system to do modifications.
 
 **Supported only in Desktop or Android Chrome.**
 
-Refer to [BlueRetro BLE Web Config User Manual](BlueRetro-BLE-Web-Config-User-Manual) for more details.
+Refer to Darthcloud`s [BlueRetro BLE Web Config User Manual](https://github.com/darthcloud/BlueRetro/wiki/BlueRetro-BLE-Web-Config-User-Manual) for more details.
 
 # 5 - Physical Button Usage
 
@@ -51,9 +55,9 @@ Refer to [BlueRetro BLE Web Config User Manual](BlueRetro-BLE-Web-Config-User-Ma
 
 ## 5.2 - BOOT (IO0) External Adapter
 * Pressing the button for less than 3 seconds (all LEDs solid):
-  - Stops pairing mode if active; otherwise, disconnects all Bluetooth devices.
+  - Starts/Stops pairing mode.
 * Pressing the button between 3 and 6 seconds (all LEDs blink slowly):
-  - Starts pairing mode.
+  - disconnects all Bluetooth devices.
 * Pressing between 6 and 10 seconds (all LEDs blink fast):
   - Factory resets the ESP32 to its original BlueRetro firmware and resets the configuration.
 
@@ -61,23 +65,22 @@ Refer to [BlueRetro BLE Web Config User Manual](BlueRetro-BLE-Web-Config-User-Ma
 The ESP32 BOOT button is connected to the Xbox DVD Tray button.
 
 ### 5.3.1 - System Behavior (ESP32 ON, Xbox ON)
-* Short press (< 3 seconds): Opens/closes the DVD Tray.
+* Short press (< 1 second): Opens/closes the DVD Tray.(all LEDs solid)
 * Longer presses:
-  - Between 3 and 6 seconds (all LEDs blink slowly): Stops pairing mode or disconnects all Bluetooth devices.
-  - Between 6 and 10 seconds (all LEDs blink fast): Starts pairing mode.
+  - Between 1 and 3 seconds (all LEDs blink slowly): Starts/Stops pairing mode.
+  - Between 3 and 6 seconds (all LEDs blink fast): disconnects all Bluetooth devices.
   - Over 10 seconds (all LEDs blink very fast): Factory resets the ESP32 and resets the configuration.
-* Quick double press: Powers down the system via the power relay.
+* Quick double press: disconnects all Bluetooth devices and powers down the system.
 
 ### 5.3.2 - System Behavior (ESP32 OFF, System OFF)
 * Holding the DVD button while powering on the system put the ESP32 in boot (download) mode. 
 
 ### 5.3.3 - System Behavior (ESP32 ON, System OFF)
-* Short press: Powers on the Xbox via the power pin.
-* Long press and release: Powers on the Xbox and sends a DVD open signal.
+* Short press: Powers on the Xbox and opens a DVD tray.
 
 ### 5.3.4 - System Behavior (ESP32 OFF, System ON)
 While the ESP32 is in boot mode or in deep sleep the system reset function is lost.
-* While in boot mode or deep sleep, Open/Clos DVD Tray function is unavailable. The reset pin controls DVD Tray opening/closing instead of the original BlueRetro reset.
+* While in boot mode or deep sleep, Open/Close DVD Tray function is unavailable. The reset pin controls DVD Tray opening/closing instead of the original BlueRetro reset.
 
 # 6 - Button Combination Functions
 There are two types of button combos to activate macro functions:
@@ -88,7 +91,7 @@ The default mappings for common functions:
 * X: DVD Tray eject/close or BlueRetro System Reset
 * A: System Shutdown/Controller disconnect
 * B: Toggle Bluetooth pairing mode
-* BACK (Select): Toggle wired output mode between GamePad and GamePadAlt (not currently used in BROGX).
+* BACK (Select): Toggle wired output mode between GamePad and GamePadAlt - GamePadAlt does not send any buttons to Arduinos, don`t use it.
 
 The default mappings for restricted functions:
 * D-pad Up: Factory Reset
@@ -101,7 +104,7 @@ Refer to the [BlueRetro Mapping Reference](https://docs.google.com/spreadsheets/
 
 # 7 - LED Usage (IO17)
 
-Refer to [5 - Physical Button Usage](#5---physical-button-usage) for LED behavior when the BOOT (IO0) button is pressed (DVD button in BROGX360).
+Refer to [5 - Physical Button Usage](#5---physical-button-usage) for LED behavior when the BOOT (IO0) button is pressed (DVD button in BROGX).
 * Solid: An error occurred. Try a power cycle or check serial logs for details.
 * Pulsing: Bluetooth inquiry mode enabled (new pairing).
 * Off: No error; Bluetooth inquiry mode disabled.
