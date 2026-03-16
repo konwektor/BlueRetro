@@ -413,11 +413,11 @@ static void boot_btn_hdl(void) {
                         bt_hci_stop_inquiry();
                     }
                     else {
-                        bt_host_disconnect_all();
+                        bt_hci_start_inquiry();
                     }
                     break;
                 case SYS_MGR_BTN_STATE2:
-                    bt_hci_start_inquiry();
+                    bt_host_disconnect_all();
                     break;
                 default:
                     sys_mgr_factory_reset();
