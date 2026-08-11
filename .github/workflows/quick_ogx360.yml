@@ -16,8 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/darthcloud/idf-blueretro:v5.5.0_2024-12-02
-    env:
-      IDF_PATH: /opt/esp/idf
     outputs:
       br_version: ${{ env.br_version }}
 
@@ -29,6 +27,10 @@ jobs:
         fetch-depth: 0
     - name: Build with ESP-IDF
       run: |
+        if [ -z "$IDF_PATH" ] || [ ! -f "$IDF_PATH/export.sh" ]; then
+          export IDF_PATH=$(dirname $(find / -name export.sh 2>/dev/null | grep -E 'idf|esp' | head -n 1))
+        fi
+        echo "Wykryta sciezka IDF_PATH: $IDF_PATH"
         . $IDF_PATH/export.sh
         echo "br_version=$(git describe --always --tags --dirty)" >> $GITHUB_ENV
         rm -fr build
