@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/darthcloud/idf-blueretro:v5.5.0_2024-12-02
-      env:
+    env:
       IDF_PATH: /opt/esp/idf
     outputs:
       br_version: ${{ env.br_version }}
