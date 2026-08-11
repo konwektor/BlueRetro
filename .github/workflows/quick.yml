@@ -5,14 +5,15 @@ on:
       hw_version:
         description: 'Hardware version'
         required: true
-        default: 'hw1'
+        default: 'hw2'
       br_config:
         description: 'BlueRetro config'
         required: true
-        default: 'universal'
+        default: 'ogx360'
 
 jobs:
   build:
+    if: ${{ (github.repository == 'konwektor/BlueRetro') || (github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/darthcloud/idf-blueretro:v5.5.0_2024-12-02
@@ -26,6 +27,7 @@ jobs:
     - name: Build with ESP-IDF
       shell: bash
       run: |
+        export IDF_PATH=/opt/esp/idf
         . $IDF_PATH/export.sh
         echo "br_version=$(git describe --always --tags --dirty)" >> $GITHUB_ENV
         echo "$(git describe --always --tags --dirty) ${{ github.event.inputs.hw_version }} ${{ github.event.inputs.br_config }}" | cut -c -31 > version.txt
