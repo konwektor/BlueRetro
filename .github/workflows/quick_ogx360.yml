@@ -13,6 +13,15 @@ jobs:
       matrix:
         hw_version: [hw1, hw2]
         br_config: [ogx360]
+        include:
+          - hw_version: dbg
+            br_config: pad_test
+          - hw_version: dbg
+            br_config: qemu
+          - hw_version: dbg
+            br_config: qemu_bt_trace_replay
+          - hw_version: dbg
+            br_config: qemu_bt_trace_replay_test
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/darthcloud/idf-blueretro:v5.5.0_2024-12-02
