@@ -26,11 +26,9 @@ jobs:
         submodules: recursive
         fetch-depth: 0
     - name: Build with ESP-IDF
+      shell: bash
       run: |
-        if [ -z "$IDF_PATH" ] || [ ! -f "$IDF_PATH/export.sh" ]; then
-          export IDF_PATH=$(dirname $(find / -name export.sh 2>/dev/null | grep -E 'idf|esp' | head -n 1))
-        fi
-        echo "Wykryta sciezka IDF_PATH: $IDF_PATH"
+        export IDF_PATH=/opt/esp/idf
         . $IDF_PATH/export.sh
         echo "br_version=$(git describe --always --tags --dirty)" >> $GITHUB_ENV
         rm -fr build
