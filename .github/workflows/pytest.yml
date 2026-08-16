@@ -53,6 +53,7 @@ jobs:
           coverage*
         if-no-files-found: error
     - name: Checkout gcov pages
+      if: ${{ (github.repository == 'darthcloud/BlueRetro') }}
       uses: actions/checkout@v4
       with:
         repository: darthcloud/BlueRetroCoverage
