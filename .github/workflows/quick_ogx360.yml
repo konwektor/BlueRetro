@@ -1,4 +1,4 @@
-name: build
+name: quick_ogx369
 on:
   push:
     branches: [ master ]
